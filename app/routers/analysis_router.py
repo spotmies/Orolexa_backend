@@ -248,6 +248,20 @@ def _process_structured_analysis(session: Session, user_id: str, files):
             "summary": "Unable to complete analysis. Please ensure images are clear and well-lit."
         }
 
+    # Include uploaded image URLs in stored report for history rendering
+    try:
+        BASE_URL = settings.BASE_URL
+        image_urls = []
+        for p in saved_paths:
+            if not p:
+                continue
+            url = p if str(p).startswith("http") else f"{BASE_URL}/{p.lstrip('/')}"
+            image_urls.append(url)
+        analysis_data["images"] = image_urls
+    except Exception:
+        # Non-fatal; continue without images field
+        pass
+
     # Create thumbnail for the first image
     thumbnail_url_or_path = storage.create_thumbnail(combined_images[0]["data"], files[0].filename) if combined_images else None
 
@@ -324,7 +338,7 @@ async def detailed_analysis(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    prompt = "Analyze the provided dental image and provide a detailed analysis."
+        prompt = "Analyze the provided dental image and provide a detailed analysis."
     results = _process_images(session, current_user, files, prompt)
     return {"success": True, "data": {"message": "Detailed analysis completed", "results": results}}
 
@@ -402,18 +416,26 @@ def get_history(
             select(AnalysisHistory).where(AnalysisHistory.user_id == current_user).order_by(AnalysisHistory.created_at.desc())
         ).all()
         BASE_URL = settings.BASE_URL
-        history_data = [
-            {
-                "id": r.id,
-                "analysis": r.ai_report,
-                "image_url": r.image_url if r.image_url.startswith("http") else f"{BASE_URL}/{r.image_url}",
-                "thumbnail_url": r.thumbnail_url if (r.thumbnail_url and r.thumbnail_url.startswith("http")) else (f"{BASE_URL}/{r.thumbnail_url}" if r.thumbnail_url else None),
-                "doctor_name": "Dr. AI Assistant",
-                "status": "completed",
-                "timestamp": r.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-            }
-            for r in records
-        ]
+        import json as _json
+        history_data = []
+        for r in records:
+            # Defaults
+            detected_issues = []
+            images = []
+            try:
+                data = _json.loads(r.ai_report) if r.ai_report else {}
+                detected_issues = data.get("detected_issues") or data.get("issues") or []
+                images = data.get("images") or []
+            except Exception:
+                pass
+
+            image_url = r.image_url if (r.image_url or "").startswith("http") else (f"{BASE_URL}/{r.image_url}" if r.image_url else None)
+
+            history_data.append({
+                "date": r.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "detected_issues": detected_issues,
+                "images": images if images else ([image_url] if image_url else []),
+            })
         return {"success": True, "data": history_data}
     except HTTPException:
         raise

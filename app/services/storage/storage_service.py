@@ -1,6 +1,7 @@
 # app/services/storage_service.py
 import os
 import uuid
+import base64
 from typing import Optional, Tuple
 from datetime import datetime
 import logging
@@ -18,10 +19,17 @@ class StorageService:
         self.allowed_types = settings.ALLOWED_IMAGE_TYPES
         self.thumbnail_size = settings.THUMBNAIL_SIZE
         
-        # Create upload directory if it doesn't exist
-        os.makedirs(self.upload_dir, exist_ok=True)
-        os.makedirs(os.path.join(self.upload_dir, "profiles"), exist_ok=True)
-        os.makedirs(os.path.join(self.upload_dir, "thumbnails"), exist_ok=True)
+        # Create upload directory if it doesn't exist, with fallback for read-only FS
+        try:
+            os.makedirs(self.upload_dir, exist_ok=True)
+            os.makedirs(os.path.join(self.upload_dir, "profiles"), exist_ok=True)
+            os.makedirs(os.path.join(self.upload_dir, "thumbnails"), exist_ok=True)
+        except PermissionError:
+            # Fallback to temp dir in restricted environments (e.g., Railway)
+            self.upload_dir = "/tmp/uploads"
+            os.makedirs(self.upload_dir, exist_ok=True)
+            os.makedirs(os.path.join(self.upload_dir, "profiles"), exist_ok=True)
+            os.makedirs(os.path.join(self.upload_dir, "thumbnails"), exist_ok=True)
 
     def save_image(self, image_data: bytes, filename: str, subfolder: str = "") -> Optional[str]:
         """Save image to storage"""
@@ -135,3 +143,39 @@ class StorageService:
         except Exception as e:
             logger.error(f"Error getting image info: {e}")
             return {}
+
+    # --- Profile helpers expected by routers ---
+    def upload_profile_file(self, user_id: str, file_obj) -> Optional[str]:
+        """Save a profile image from an UploadFile to /profiles and return URL."""
+        try:
+            content = file_obj.file.read()
+            if not content:
+                return None
+            # Basic validation via Pillow
+            ok, _msg = self.validate_image(content, file_obj.filename)
+            if not ok:
+                return None
+            return self.save_image(content, file_obj.filename, subfolder="profiles")
+        except Exception as e:
+            logger.error(f"upload_profile_file error: {e}")
+            return None
+
+    def upload_profile_base64(self, user_id: str, image_str: str) -> Optional[str]:
+        """Save a base64 (or data URL) profile image to /profiles and return URL."""
+        try:
+            if image_str.startswith('data:image/'):
+                _header, data = image_str.split(',', 1)
+                content = base64.b64decode(data)
+                # best-effort extension
+                ext = _header.split(';')[0].split('/')[1].lower()
+                filename = f"{uuid.uuid4()}.{ext if ext in ['jpeg','jpg','png','webp'] else 'jpg'}"
+            else:
+                content = base64.b64decode(image_str)
+                filename = f"{uuid.uuid4()}.jpg"
+            ok, _msg = self.validate_image(content, filename)
+            if not ok:
+                return None
+            return self.save_image(content, filename, subfolder="profiles")
+        except Exception as e:
+            logger.error(f"upload_profile_base64 error: {e}")
+            return None
