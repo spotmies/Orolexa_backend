@@ -743,7 +743,73 @@ def get_image_service() -> ImageService:
     return ImageService()
 
 def get_profile_service() -> ProfileService:
-    return ProfileService()
+    session = _Session(_engine)
+    return ProfileService(session)
+
+"""
+Dependency to get current user from JWT token must be defined
+before any endpoint that references it (e.g., logout, profile routes)
+to avoid NameError at import time.
+"""
+async def get_current_user(request: Request) -> User:
+    """Get current user from JWT token"""
+    try:
+        token = None
+        
+        # First try Authorization header
+        auth_header = request.headers.get('Authorization')
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+        else:
+            # Fallback to cookie
+            token = request.cookies.get("access_token")
+        
+        if not token:
+            raise HTTPException(status_code=401, detail="Invalid authorization header")
+        
+        # Decode JWT token
+        payload = decode_jwt_token(token)
+        if not payload:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        
+        user_id = payload.get('sub')
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token: missing user ID")
+        
+        # Get user from database
+        with Session(engine) as session:
+            user = session.exec(
+                select(User).where(User.id == user_id)
+            ).first()
+            
+            if not user:
+                raise HTTPException(status_code=401, detail="User not found")
+            
+            return user
+            
+    except Exception as e:
+        logger.error(f"Error getting current user: {e}")
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+@router.post("/logout")
+async def logout(current_user: User = Depends(get_current_user)):
+    """
+    Logout current user
+    """
+    try:
+        # In a real implementation, you might want to:
+        # 1. Invalidate the JWT token (add to blacklist)
+        # 2. Delete the user session from database
+        # 3. Clear any cached data
+        
+        # For now, just return success
+        return {
+            "success": True,
+            "message": "Logout successful"
+        }
+    except Exception as e:
+        logger.error(f"Logout error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/login", response_model=LoginResponse)
 async def login(payload: LoginRequest, request: Request, auth_service: AuthService = Depends(get_auth_service), audit: AuditLogger = Depends(get_audit_logger), limiter: RateLimiter = Depends(get_rate_limiter)):
@@ -1005,13 +1071,17 @@ async def verify_otp(payload: VerifyOTPRequest, response: Response, auth_service
 
         access_token = create_jwt_token({"sub": user.id})
         refresh_token = create_refresh_token({"sub": user.id})
-        # Persist session via repository
-        auth_service.session_repo.create(
-            user_id=user.id,
-            token=access_token,
-            refresh_token=refresh_token,
-            expires_at=datetime.utcnow() + timedelta(days=30),
-        )
+        
+        # Create user session
+        with Session(engine) as session:
+            user_session = UserSession(
+                user_id=user.id,
+                token=access_token,
+                refresh_token=refresh_token,
+                expires_at=datetime.utcnow() + timedelta(days=30)
+            )
+            session.add(user_session)
+            session.commit()
         
         # Prepare user response
         user_response = UserResponse(
@@ -1165,46 +1235,7 @@ async def get_metrics():
         logger.error(f"Metrics collection failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to collect metrics")
 
-# Dependency to get current user from JWT token
-async def get_current_user(request: Request) -> User:
-    """Get current user from JWT token"""
-    try:
-        token = None
-        
-        # First try Authorization header
-        auth_header = request.headers.get('Authorization')
-        if auth_header and auth_header.startswith('Bearer '):
-            token = auth_header.split(' ')[1]
-        else:
-            # Fallback to cookie
-            token = request.cookies.get("access_token")
-        
-        if not token:
-            raise HTTPException(status_code=401, detail="Invalid authorization header")
-        
-        # Decode JWT token
-        payload = decode_jwt_token(token)
-        if not payload:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        user_id = payload.get('sub')
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token: missing user ID")
-        
-        # Get user from database
-        with Session(engine) as session:
-            user = session.exec(
-                select(User).where(User.id == user_id)
-            ).first()
-            
-            if not user:
-                raise HTTPException(status_code=401, detail="User not found")
-            
-            return user
-            
-    except Exception as e:
-        logger.error(f"Error getting current user: {e}")
-        raise HTTPException(status_code=401, detail="Invalid token")
+ 
 
 # Profile Management Endpoints
 @router.get("/profile/me", response_model=UserResponse)
@@ -1372,12 +1403,27 @@ async def update_profile(
         client_info = get_client_info(request) if request else {}
         
         # Update data via service
-        profile_service.update_profile(
-            user_id=current_user.id,
-            name=payload.name,
-            age=payload.age,
-            date_of_birth=payload.date_of_birth,
-        )
+        update_data = {}
+        if payload.name is not None:
+            update_data['name'] = payload.name
+        if payload.age is not None:
+            update_data['age'] = payload.age
+        if payload.date_of_birth is not None:
+            update_data['date_of_birth'] = datetime.strptime(payload.date_of_birth, '%Y-%m-%d') if payload.date_of_birth else None
+        
+        with Session(engine) as session:
+            user = session.exec(select(User).where(User.id == current_user.id)).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Update user fields
+            for key, value in update_data.items():
+                setattr(user, key, value)
+            user.updated_at = datetime.utcnow()
+            
+            session.add(user)
+            session.commit()
+            session.refresh(user)
 
         # Fetch updated user for response
         with Session(engine) as session:
