@@ -1,6 +1,7 @@
 # app/models/settings.py
 from sqlmodel import SQLModel, Field
 from datetime import datetime
+from typing import Optional
 
 class UserSettings(SQLModel, table=True):
     __tablename__ = "user_settings"

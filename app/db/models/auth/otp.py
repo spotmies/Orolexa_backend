@@ -1,6 +1,7 @@
 # app/models/otp.py
 from sqlmodel import SQLModel, Field
 from datetime import datetime
+from typing import Optional
 import uuid
 
 class OTPCode(SQLModel, table=True):
