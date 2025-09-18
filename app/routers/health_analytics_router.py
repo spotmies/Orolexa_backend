@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from ..db.session import get_session
 from ..db.models.health.analysis import AnalysisHistory
 from ..db.models.users.user import User
-from ..db.models.health.appointment import Appointment
 from ..schemas.analysis.analysis import HealthSummary
 from ..services.auth import decode_jwt_token
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials

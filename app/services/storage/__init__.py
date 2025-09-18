@@ -1,6 +1,6 @@
 from typing import Optional
 from sqlmodel import Session, select
-from app.db.models import ImageStorage, User, AnalysisHistory, Appointment, Notification, DeviceConnection, UserSettings, UserSession, OTPCode
+from app.db.models import ImageStorage, User, AnalysisHistory, UserSession, OTPCode
 
 def get_image_from_database(session: Session, image_id: str) -> Optional[ImageStorage]:
     return session.get(ImageStorage, image_id)
@@ -16,10 +16,6 @@ def delete_user_cascade(session: Session, user_id: str) -> bool:
         # Delete dependent rows referencing user
         for model in [
             AnalysisHistory,
-            Appointment,
-            Notification,
-            DeviceConnection,
-            UserSettings,
             UserSession,
             OTPCode,
             ImageStorage,

@@ -13,12 +13,7 @@ from app.db.session import create_db_and_tables
 from app.routers import (
     auth_router,
     analysis_router,
-    appointments_router,
-    doctors_router,
-    devices_router,
-    health_analytics_router,
-    notifications_router,
-    settings_router
+    health_analytics_router
 )
 
 # Configure logging
@@ -72,12 +67,7 @@ if os.path.exists("uploads"):
 # Include routers
 app.include_router(auth_router.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(analysis_router.router, prefix="/api/analysis", tags=["Analysis"])
-app.include_router(appointments_router.router, prefix="/api/appointments", tags=["Appointments"])
-app.include_router(doctors_router.router, prefix="/api/doctors", tags=["Doctors"])
-app.include_router(devices_router.router, prefix="/api/devices", tags=["Devices"])
 app.include_router(health_analytics_router.router, prefix="/api/health", tags=["Health Analytics"])
-app.include_router(notifications_router.router, prefix="/api/notifications", tags=["Notifications"])
-app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
 
 # Global exception handler
 @app.exception_handler(Exception)

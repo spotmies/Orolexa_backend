@@ -8,10 +8,6 @@ from ..db.models.auth.otp import OTPCode
 from ..db.models.users.session import UserSession
 from ..db.models.media.image import ImageStorage
 from ..db.models.health.analysis import AnalysisHistory
-from ..db.models.health.appointment import Appointment
-from ..db.models.health.notification import Notification
-from ..db.models.health.device import DeviceConnection
-from ..db.models.users.settings import UserSettings
 from ..services.storage.compat import (
     get_image_from_database,
     get_user_profile_image,

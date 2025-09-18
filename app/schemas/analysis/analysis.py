@@ -52,6 +52,13 @@ class StructuredAnalysisResponse(BaseModel):
     analysis_id: int
     timestamp: str
 
+class HealthSummary(BaseModel):
+    total_analyses: int = Field(..., description="Total number of analyses performed")
+    last_analysis_date: Optional[str] = Field(None, description="Date of the last analysis (YYYY-MM-DD)")
+    health_score: int = Field(..., ge=0, le=100, description="Overall health score (0-100)")
+    recommendations: List[str] = Field(default_factory=list, description="Health recommendations")
+    next_checkup_date: Optional[str] = Field(None, description="Recommended next checkup date (YYYY-MM-DD)")
+
 class AnalysisHistoryResponse(BaseModel):
     success: bool
     data: List[AnalysisResponse]

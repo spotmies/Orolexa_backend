@@ -22,7 +22,4 @@ class User(SQLModel, table=True):
 
     # Relationships
     histories: List["AnalysisHistory"] = Relationship(back_populates="user")
-    appointments: List["Appointment"] = Relationship(back_populates="user")
-    notifications: List["Notification"] = Relationship(back_populates="user")
-    device_connections: List["DeviceConnection"] = Relationship(back_populates="user")
     sessions: List["UserSession"] = Relationship(back_populates="user")

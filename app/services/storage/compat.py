@@ -5,10 +5,6 @@ from app.db.models import (
     ImageStorage,
     User,
     AnalysisHistory,
-    Appointment,
-    Notification,
-    DeviceConnection,
-    UserSettings,
     UserSession,
     OTPCode,
 )
@@ -49,10 +45,6 @@ def delete_user_cascade(session: Session, user_id: str) -> bool:
         for model, cond in [
             (ImageStorage, ImageStorage.user_id == user_id),
             (AnalysisHistory, AnalysisHistory.user_id == user_id),
-            (Appointment, Appointment.user_id == user_id),
-            (Notification, Notification.user_id == user_id),
-            (DeviceConnection, DeviceConnection.user_id == user_id),
-            (UserSettings, UserSettings.user_id == user_id),
             (UserSession, UserSession.user_id == user_id),
             (OTPCode, OTPCode.phone == (session.exec(select(User).where(User.id == user_id)).first().phone if session else None)),
         ]:
