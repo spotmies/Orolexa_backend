@@ -389,44 +389,36 @@ def _process_structured_analysis(session: Session, user_id: str, files):
                     break
         
         if non_dental_detected:
-            # Return a structured response for non-dental images
-            return {
-                "success": True,
-                "message": "Analysis completed, but some images are not dental-related",
-                "data": {
-                    "analysis_type": "mixed_content_detection",
-                    "is_dental": False,
-                    "image_description": "Some images do not contain dental content",
-                    "suggestion": "Please upload only images showing teeth, gums, or oral cavity for accurate dental analysis",
-                    "recommendations": [
-                        {
-                            "recommendation": "Upload clear images of your teeth or mouth only",
-                            "priority": "high"
-                        },
-                        {
-                            "recommendation": "Ensure good lighting when taking dental photos",
-                            "priority": "medium"
-                        },
-                        {
-                            "recommendation": "Focus on teeth, gums, or oral cavity area",
-                            "priority": "medium"
-                        }
-                    ],
-                    "health_score": None,
-                    "health_status": "unable_to_assess",
-                    "detected_issues": [],
-                    "positive_aspects": [],
-                    "summary": "Some of the uploaded images do not appear to contain dental content. For accurate dental health analysis, please upload only images showing your teeth, gums, or oral cavity."
-                }
+            # Build a standardized analysis payload and continue the normal flow
+            # so that the function still returns (health_report, analysis_id)
+            import json as _json
+            analysis_payload = {
+                "health_score": 0.0,
+                # Use a valid enum value for health_status to avoid schema errors
+                "health_status": "fair",
+                "risk_level": "low",
+                "detected_issues": [],
+                "positive_aspects": [],
+                "recommendations": [
+                    {"recommendation": "Upload clear images of your teeth or mouth only", "priority": "high"},
+                    {"recommendation": "Ensure good lighting when taking dental photos", "priority": "medium"},
+                    {"recommendation": "Focus on teeth, gums, or oral cavity area", "priority": "medium"}
+                ],
+                "summary": "Some uploaded images are not dental-related. Unable to assess dental health. Please upload images showing teeth, gums, or oral cavity.",
+                # Keep a hint for clients/debugging
+                "analysis_type": "mixed_content_detection",
+                "is_dental": False
             }
-        
-        # Prepare content for multi-image analysis
-        content_parts = [prompt]
-        for img in combined_images:
-            content_parts.append(img)
-        
-        result = model.generate_content(content_parts)
-        analysis_text = result.text if hasattr(result, "text") else str(result)
+
+            analysis_text = _json.dumps(analysis_payload)
+        else:
+            # Prepare content for multi-image analysis
+            content_parts = [prompt]
+            for img in combined_images:
+                content_parts.append(img)
+            
+            result = model.generate_content(content_parts)
+            analysis_text = result.text if hasattr(result, "text") else str(result)
     except Exception as e:
         logger.error(f"Error generating AI analysis: {e}")
         # Fallback to a basic analysis message
