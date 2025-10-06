@@ -41,7 +41,37 @@ class StorageService:
             
             # Generate unique filename
             file_id = str(uuid.uuid4())
-            file_ext = os.path.splitext(filename)[1]
+            
+            # Extract file extension safely
+            # Check if filename contains a data URI (common frontend mistake)
+            if filename and filename.startswith('data:image/'):
+                # Extract extension from data URI header
+                # e.g., "data:image/jpeg;base64,..." -> "jpeg"
+                try:
+                    mime_part = filename.split(';')[0].split('/')[1]
+                    file_ext = f".{mime_part.lower()}"
+                    if file_ext not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+                        file_ext = '.jpg'
+                except:
+                    file_ext = '.jpg'
+            else:
+                # Normal filename - extract extension
+                file_ext = os.path.splitext(filename)[1].lower()
+                # Ensure valid extension
+                if not file_ext or file_ext not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+                    # Try to detect from image data
+                    try:
+                        image = Image.open(io.BytesIO(image_data))
+                        format_ext = image.format.lower()
+                        if format_ext == 'jpeg':
+                            file_ext = '.jpg'
+                        elif format_ext in ['png', 'webp', 'gif']:
+                            file_ext = f'.{format_ext}'
+                        else:
+                            file_ext = '.jpg'
+                    except:
+                        file_ext = '.jpg'
+            
             new_filename = f"{file_id}{file_ext}"
             
             # Create path
@@ -79,7 +109,22 @@ class StorageService:
             
             # Generate thumbnail filename
             file_id = str(uuid.uuid4())
-            file_ext = os.path.splitext(filename)[1]
+            
+            # Extract file extension safely (handle data URI in filename)
+            if filename and filename.startswith('data:image/'):
+                # Extract extension from data URI
+                try:
+                    mime_part = filename.split(';')[0].split('/')[1]
+                    file_ext = f".{mime_part.lower()}"
+                    if file_ext not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+                        file_ext = '.jpg'
+                except:
+                    file_ext = '.jpg'
+            else:
+                file_ext = os.path.splitext(filename)[1].lower()
+                if not file_ext or file_ext not in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+                    file_ext = '.jpg'
+            
             thumb_filename = f"{file_id}_thumb{file_ext}"
             thumb_path = os.path.join(self.upload_dir, "thumbnails", thumb_filename)
             
