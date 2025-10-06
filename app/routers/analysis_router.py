@@ -26,6 +26,112 @@ from ..schemas.analysis.analysis import (
     RiskLevel
 )
 
+def detect_image_type(model, image_data: bytes, mime_type: str) -> dict:
+    """Detect if the image is dental-related or not"""
+    try:
+        detection_prompt = """
+        Please analyze this image and determine if it contains dental/teeth content suitable for dental health analysis.
+        
+        Respond with a JSON object containing:
+        {
+            "is_dental": true/false,
+            "image_type": "dental" or "non-dental",
+            "description": "Brief description of what the image shows",
+            "suggestion": "Helpful suggestion for the user"
+        }
+        
+        Consider it dental if it shows:
+        - Teeth, gums, or oral cavity
+        - Dental X-rays or scans
+        - Mouth/teeth close-ups
+        - Dental procedures or equipment
+        
+        Consider it non-dental if it shows:
+        - Certificates, documents, or text
+        - Faces without clear teeth focus
+        - Objects unrelated to dental health
+        - Landscapes, buildings, or other non-medical content
+        """
+        
+        result = model.generate_content([
+            detection_prompt,
+            {"mime_type": mime_type, "data": image_data}
+        ])
+        
+        response_text = result.text if hasattr(result, "text") else str(result)
+        
+        # Try to parse JSON response
+        import json
+        try:
+            # Clean the response to extract JSON
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}') + 1
+            if json_start != -1 and json_end != 0:
+                json_str = response_text[json_start:json_end]
+                detection_result = json.loads(json_str)
+                return detection_result
+        except:
+            pass
+        
+        # Fallback: analyze response text for keywords
+        response_lower = response_text.lower()
+        if any(keyword in response_lower for keyword in ['not dental', 'not teeth', 'certificate', 'document', 'not suitable']):
+            return {
+                "is_dental": False,
+                "image_type": "non-dental",
+                "description": "Image does not appear to contain dental content",
+                "suggestion": "Please upload an image showing teeth, gums, or oral cavity for dental analysis"
+            }
+        else:
+            return {
+                "is_dental": True,
+                "image_type": "dental",
+                "description": "Image appears to contain dental content",
+                "suggestion": "Proceeding with dental analysis"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error detecting image type: {e}")
+        # Default to assuming it's dental if detection fails
+        return {
+            "is_dental": True,
+            "image_type": "dental",
+            "description": "Unable to determine image type",
+            "suggestion": "Proceeding with dental analysis"
+        }
+
+def create_non_dental_response(image_detection: dict) -> dict:
+    """Create a standardized response for non-dental images"""
+    return {
+        "success": True,
+        "message": "Image uploaded successfully, but analysis shows this is not a dental image",
+        "data": {
+            "analysis_type": "image_type_detection",
+            "is_dental": False,
+            "image_description": image_detection.get("description", "Non-dental image detected"),
+            "suggestion": image_detection.get("suggestion", "Please upload an image showing teeth or oral cavity"),
+            "recommendations": [
+                {
+                    "recommendation": "Upload a clear image of your teeth or mouth",
+                    "priority": "high"
+                },
+                {
+                    "recommendation": "Ensure good lighting when taking dental photos",
+                    "priority": "medium"
+                },
+                {
+                    "recommendation": "Focus on teeth, gums, or oral cavity area",
+                    "priority": "medium"
+                }
+            ],
+            "health_score": None,
+            "health_status": "unable_to_assess",
+            "detected_issues": [],
+            "positive_aspects": [],
+            "summary": f"This image appears to be {image_detection.get('description', 'non-dental content')}. For dental health analysis, please upload an image showing your teeth, gums, or oral cavity."
+        }
+    }
+
 def list_available_models():
     """List available Gemini models for debugging"""
     try:
@@ -117,6 +223,16 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
 
         try:
             model = get_gemini_model()
+            
+            # First, detect if this is a dental image
+            image_detection = detect_image_type(model, image_bytes, mime_type)
+            
+            if not image_detection.get("is_dental", True):
+                # Handle non-dental image
+                logger.info(f"Non-dental image detected: {image_detection.get('description', 'Unknown')}")
+                return create_non_dental_response(image_detection)
+            
+            # Proceed with dental analysis
             result = model.generate_content([
                 prompt,
                 {"mime_type": mime_type, "data": image_bytes}
@@ -261,6 +377,48 @@ def _process_structured_analysis(session: Session, user_id: str, files):
 
     try:
         model = get_gemini_model()
+        
+        # Check if any of the images are non-dental
+        non_dental_detected = False
+        for img in combined_images:
+            if isinstance(img, dict) and "mime_type" in img and "data" in img:
+                image_detection = detect_image_type(model, img["data"], img["mime_type"])
+                if not image_detection.get("is_dental", True):
+                    non_dental_detected = True
+                    logger.info(f"Non-dental image detected in structured analysis: {image_detection.get('description', 'Unknown')}")
+                    break
+        
+        if non_dental_detected:
+            # Return a structured response for non-dental images
+            return {
+                "success": True,
+                "message": "Analysis completed, but some images are not dental-related",
+                "data": {
+                    "analysis_type": "mixed_content_detection",
+                    "is_dental": False,
+                    "image_description": "Some images do not contain dental content",
+                    "suggestion": "Please upload only images showing teeth, gums, or oral cavity for accurate dental analysis",
+                    "recommendations": [
+                        {
+                            "recommendation": "Upload clear images of your teeth or mouth only",
+                            "priority": "high"
+                        },
+                        {
+                            "recommendation": "Ensure good lighting when taking dental photos",
+                            "priority": "medium"
+                        },
+                        {
+                            "recommendation": "Focus on teeth, gums, or oral cavity area",
+                            "priority": "medium"
+                        }
+                    ],
+                    "health_score": None,
+                    "health_status": "unable_to_assess",
+                    "detected_issues": [],
+                    "positive_aspects": [],
+                    "summary": "Some of the uploaded images do not appear to contain dental content. For accurate dental health analysis, please upload only images showing your teeth, gums, or oral cavity."
+                }
+            }
         
         # Prepare content for multi-image analysis
         content_parts = [prompt]
