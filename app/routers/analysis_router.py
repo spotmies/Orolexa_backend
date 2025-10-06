@@ -26,6 +26,24 @@ from ..schemas.analysis.analysis import (
     RiskLevel
 )
 
+def get_gemini_model():
+    """Get a working Gemini model, trying fallback models if needed"""
+    models_to_try = [settings.GEMINI_MODEL] + settings.GEMINI_FALLBACK_MODELS
+    models_to_try = list(dict.fromkeys(models_to_try))  # Remove duplicates while preserving order
+    
+    for model_name in models_to_try:
+        try:
+            model = genai.GenerativeModel(model_name)
+            # Test if model is accessible by making a simple call
+            test_result = model.generate_content("test")
+            logger.info(f"Successfully initialized Gemini model: {model_name}")
+            return model
+        except Exception as e:
+            logger.warning(f"Failed to initialize model {model_name}: {e}")
+            continue
+    
+    raise Exception("No working Gemini model found. Please check your API key and model availability.")
+
 logger = logging.getLogger(__name__)
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -75,12 +93,17 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
             mime_type = "image/jpeg"
         image_bytes = content
 
-        model = genai.GenerativeModel(settings.GEMINI_MODEL)
-        result = model.generate_content([
-            prompt,
-            {"mime_type": mime_type, "data": image_bytes}
-        ])
-        analysis_text = result.text if hasattr(result, "text") else str(result)
+        try:
+            model = get_gemini_model()
+            result = model.generate_content([
+                prompt,
+                {"mime_type": mime_type, "data": image_bytes}
+            ])
+            analysis_text = result.text if hasattr(result, "text") else str(result)
+        except Exception as e:
+            logger.error(f"Error generating AI analysis: {e}")
+            # Fallback to a basic analysis message
+            analysis_text = f"Image analysis completed. Error with AI model: {str(e)}. Please try again later."
 
         thumbnail_url_or_path = storage.create_thumbnail(content, uploaded.filename)
 
@@ -214,15 +237,20 @@ def _process_structured_analysis(session: Session, user_id: str, files):
     Priority: "low", "medium", "high"
     """
 
-    model = genai.GenerativeModel(settings.GEMINI_MODEL)
-    
-    # Prepare content for multi-image analysis
-    content_parts = [prompt]
-    for img in combined_images:
-        content_parts.append(img)
-    
-    result = model.generate_content(content_parts)
-    analysis_text = result.text if hasattr(result, "text") else str(result)
+    try:
+        model = get_gemini_model()
+        
+        # Prepare content for multi-image analysis
+        content_parts = [prompt]
+        for img in combined_images:
+            content_parts.append(img)
+        
+        result = model.generate_content(content_parts)
+        analysis_text = result.text if hasattr(result, "text") else str(result)
+    except Exception as e:
+        logger.error(f"Error generating AI analysis: {e}")
+        # Fallback to a basic analysis message
+        analysis_text = f"Image analysis completed. Error with AI model: {str(e)}. Please try again later."
     
     # Parse JSON response
     import json
