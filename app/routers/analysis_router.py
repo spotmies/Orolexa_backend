@@ -26,13 +26,33 @@ from ..schemas.analysis.analysis import (
     RiskLevel
 )
 
+def list_available_models():
+    """List available Gemini models for debugging"""
+    try:
+        models = genai.list_models()
+        available_models = []
+        for model in models:
+            if 'generateContent' in model.supported_generation_methods:
+                available_models.append(model.name)
+        logger.info(f"Available Gemini models: {available_models}")
+        return available_models
+    except Exception as e:
+        logger.error(f"Failed to list available models: {e}")
+        return []
+
 def get_gemini_model():
     """Get a working Gemini model, trying fallback models if needed"""
+    # First, try to list available models for debugging
+    available_models = list_available_models()
+    
     models_to_try = [settings.GEMINI_MODEL] + settings.GEMINI_FALLBACK_MODELS
     models_to_try = list(dict.fromkeys(models_to_try))  # Remove duplicates while preserving order
     
+    logger.info(f"Attempting to initialize Gemini model. Trying models: {models_to_try}")
+    
     for model_name in models_to_try:
         try:
+            logger.info(f"Trying model: {model_name}")
             model = genai.GenerativeModel(model_name)
             # Test if model is accessible by making a simple call
             test_result = model.generate_content("test")
@@ -42,6 +62,8 @@ def get_gemini_model():
             logger.warning(f"Failed to initialize model {model_name}: {e}")
             continue
     
+    # If we get here, all models failed
+    logger.error("All Gemini models failed to initialize. Please check your API key and model availability.")
     raise Exception("No working Gemini model found. Please check your API key and model availability.")
 
 logger = logging.getLogger(__name__)

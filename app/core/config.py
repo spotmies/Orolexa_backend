@@ -45,8 +45,8 @@ class Settings(BaseSettings):
     
     # AI Settings
     GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-1.5-pro")
-    GEMINI_FALLBACK_MODELS: List[str] = ["gemini-1.5-pro", "gemini-1.0-pro", "gemini-pro"]
+    GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_FALLBACK_MODELS: List[str] = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest"]
     
     # Twilio Settings
     TWILIO_ACCOUNT_SID: str = os.environ.get("TWILIO_ACCOUNT_SID", "")
