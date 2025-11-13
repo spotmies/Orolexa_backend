@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field, validator
 from typing import Optional, Dict, Any
 import re
 import base64
-import ios
+import io
 from PIL import Image
 from datetime import datetime
 
