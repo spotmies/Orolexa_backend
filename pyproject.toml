@@ -44,7 +44,7 @@ dependencies = [
     "pillow>=11.3.0",
     "opencv-python>=4.12.0.88",
     "google-generativeai>=0.8.5",
-    "twilio>=9.7.0",
+    # Twilio removed in favor of Firebase
     "firebase-admin>=6.2.0",
     "redis>=5.0.0",
     "pytest>=8.3.3",

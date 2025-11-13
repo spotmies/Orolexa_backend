@@ -20,9 +20,7 @@ from ..schemas import (
     UploadImageRequest, UploadImageResponse, DeleteImageResponse, DeleteAccountRequest, DeleteAccountResponse
 )
 from ..services.auth import create_jwt_token, create_refresh_token, decode_jwt_token
-from twilio.rest import Client
-from twilio.http.http_client import TwilioHttpClient
-from twilio.base.exceptions import TwilioException, TwilioRestException
+from app.services.auth.firebase_service import verify_firebase_id_token, extract_user_info_from_claims
 import os
 import uuid
 import shutil
@@ -51,23 +49,7 @@ RATE_LIMIT_WINDOW_HOURS = 1
 MAX_REQUESTS_PER_WINDOW = 3
 SESSION_EXPIRY_DAYS = 30
 
-# Enhanced Twilio config with retry logic and timeout
-_twilio_http_client = TwilioHttpClient(
-    timeout=15,  # Increased timeout for production
-    max_retries=3  # Retry failed requests
-)
-
-# Initialize Twilio client with error handling
-try:
-    client = Client(
-        settings.TWILIO_ACCOUNT_SID, 
-        settings.TWILIO_AUTH_TOKEN, 
-        http_client=_twilio_http_client
-    )
-    logger.info("Twilio client initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize Twilio client: {e}")
-    client = None
+# Twilio removed; Firebase verification is used instead
 
 # In-memory cache for rate limiting (use Redis in production)
 _rate_limit_cache: Dict[str, Dict[str, Any]] = {}
@@ -842,8 +824,9 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
                 session.commit()
                 session.refresh(user)
         
-        # Enhanced rate limiting
-        if not limiter.allow_request(f"login:{payload.phone}", MAX_REQUESTS_PER_WINDOW, RATE_LIMIT_WINDOW_HOURS * 3600):
+        # Enhanced rate limiting - keyed by Firebase token hash to avoid phone requirement
+        token_key = hashlib.sha256(payload.firebase_id_token.encode()).hexdigest()
+        if not limiter.allow_request(f"login:{token_key}", MAX_REQUESTS_PER_WINDOW, RATE_LIMIT_WINDOW_HOURS * 3600):
             audit.log('rate_limit_exceeded', payload.phone, request_id=request_id, 
                       ip_address=client_info['ip_address'], success=False)
             return LoginResponse(
@@ -851,43 +834,55 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
                 message="Too many OTP requests. Please try again later.",
                 data={"error": "RATE_LIMIT_EXCEEDED"}
             )
-        
-        # Send OTP via Twilio
-        try:
-            otp_service = TwilioOTPProvider()
-            verification_sid = otp_service.send_otp(payload.phone)
-            if not verification_sid:
-                raise Exception("Failed to send OTP via Twilio")
-        except Exception as e:
-            logger.error(f"Failed to send OTP: {e}")
-            audit.log('otp_send_failed', payload.phone, user.id, request_id, 
-                      client_info['ip_address'], success=False, details={'error': str(e)})
-            raise HTTPException(status_code=500, detail="Failed to send OTP")
-        
-        # Store verification attempt in database for tracking
-        expires_at = datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
-        
+
+        # Verify Firebase ID token and authenticate immediately (no OTP flow)
+        claims = verify_firebase_id_token(payload.firebase_id_token)
+        if not claims:
+            raise HTTPException(status_code=401, detail="Invalid Firebase token")
+
+        info = extract_user_info_from_claims(claims)
+        firebase_phone = info.get("phone") or payload.phone
+
+        if not firebase_phone:
+            raise HTTPException(status_code=400, detail="Phone number not available from token or request")
+
+        # Ensure user exists
         with Session(engine) as session:
-            otp_code = OTPCode(
-                phone=payload.phone,
-                otp="",  # We don't store the actual OTP, Twilio handles it
-                flow="login",
-                expires_at=expires_at
+            user = session.exec(select(User).where(User.phone == firebase_phone)).first()
+            if not user:
+                user = User(
+                    id=str(uuid.uuid4()),
+                    name=info.get("name") or "User",
+                    phone=firebase_phone,
+                    is_verified=True,
+                    is_active=True
+                )
+                session.add(user)
+                session.commit()
+                session.refresh(user)
+
+        # Issue JWTs and session
+        access_token = create_jwt_token({"sub": user.id})
+        refresh_token = create_refresh_token({"sub": user.id})
+
+        with Session(engine) as session:
+            user_session = UserSession(
+                user_id=user.id,
+                token=access_token,
+                refresh_token=refresh_token,
+                expires_at=datetime.utcnow() + timedelta(days=30)
             )
-            session.add(otp_code)
+            session.add(user_session)
             session.commit()
-        
-        # Audit logging for successful OTP send
-        audit.log('login_otp_sent', payload.phone, user.id, request_id, 
-                  client_info['ip_address'], True, {'verification_sid': verification_sid})
-        
+
+        audit.log('firebase_login', firebase_phone, user.id, request_id, client_info['ip_address'], True)
+
         return LoginResponse(
             success=True,
-            message="OTP sent successfully",
+            message="Login successful",
             data={
-                "phone": payload.phone,
-                "otp_expires_in": OTP_EXPIRY_MINUTES * 60,
-                "request_id": request_id
+                "phone": firebase_phone,
+                "request_id": request_id,
             }
         )
         
@@ -1020,50 +1015,42 @@ async def register(
 async def register_send_otp_alias(payload: RegisterRequest):
     return await register(payload)
 
-@router.post("/verify-otp", response_model=VerifyOTPResponse)
-async def verify_otp(payload: VerifyOTPRequest, response: Response, auth_service: AuthService = Depends(get_auth_service), audit: AuditLogger = Depends(get_audit_logger)):
+@router.post("/firebase/verify", response_model=VerifyOTPResponse)
+async def firebase_verify(payload: VerifyOTPRequest, response: Response, auth_service: AuthService = Depends(get_auth_service), audit: AuditLogger = Depends(get_audit_logger)):
     """
-    OTP Verification API - Verify OTP using Twilio Verify
+    Verify Firebase ID token and issue backend JWTs
     """
     try:
-        # Clean up expired OTPs
-        cleanup_expired_otps()
-        
-        # Get phone and OTP from payload (supports both old and new formats)
-        phone = payload.get_phone()
-        otp = payload.get_otp()
-        flow = payload.get_flow()
-        
-        if not phone or not otp:
-            return VerifyOTPResponse(
-                success=False,
-                message="Missing phone number or OTP",
-                data={"error": "MISSING_REQUIRED_FIELDS"}
-            )
-        
-        # Verify OTP using Twilio
-        is_valid = False
-        try:
-            otp_service = TwilioOTPProvider()
-            is_valid = otp_service.verify_otp(phone, otp)
-        except Exception as e:
-            logger.error(f"OTP provider error: {e}")
-            is_valid = False
-        
-        if not is_valid:
-            return VerifyOTPResponse(
-                success=False,
-                message="Invalid OTP",
-                data={"error": "INVALID_OTP"}
-            )
-        
-        # Find user
+        # Expect firebase_id_token in payload.extra
+        firebase_id_token = getattr(payload, 'firebase_id_token', None) or payload.__dict__.get('firebase_id_token')
+        if not firebase_id_token:
+            return VerifyOTPResponse(success=False, message="Missing firebase_id_token", data={"error": "MISSING_TOKEN"})
+
+        claims = verify_firebase_id_token(firebase_id_token)
+        if not claims:
+            return VerifyOTPResponse(success=False, message="Invalid Firebase token", data={"error": "INVALID_TOKEN"})
+
+        info = extract_user_info_from_claims(claims)
+        phone = info.get("phone") or payload.get_phone()
+        if not phone:
+            return VerifyOTPResponse(success=False, message="Phone number not found", data={"error": "MISSING_PHONE"})
+
+        # Find or create user
         with Session(engine) as session:
             user = session.exec(select(User).where(User.phone == phone)).first()
             if not user:
-                return VerifyOTPResponse(success=False, message="User not found", data={"error": "USER_NOT_FOUND"})
+                user = User(
+                    id=str(uuid.uuid4()),
+                    name=info.get("name") or "User",
+                    phone=phone,
+                    is_verified=True,
+                    is_active=True
+                )
+                session.add(user)
+                session.commit()
+                session.refresh(user)
 
-            # Verify and issue tokens
+            # Mark verified
             user.is_verified = True
             session.add(user)
             session.commit()
@@ -1112,7 +1099,7 @@ async def verify_otp(payload: VerifyOTPRequest, response: Response, auth_service
 
         return VerifyOTPResponse(
             success=True,
-            message="OTP verified successfully",
+            message="Authenticated via Firebase",
             data={
                 "user": user_response.dict(),
                 "token": access_token,
@@ -1125,66 +1112,8 @@ async def verify_otp(payload: VerifyOTPRequest, response: Response, auth_service
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/resend-otp", response_model=ResendOTPResponse)
-async def resend_otp(payload: ResendOTPRequest, auth_service: AuthService = Depends(get_auth_service), limiter: RateLimiter = Depends(get_rate_limiter)):
-    """
-    Resend OTP API using Twilio Verify
-    """
-    try:
-        # Check if user exists
-        with Session(engine) as session:
-            user = session.exec(
-                select(User).where(User.phone == payload.phone)
-            ).first()
-            
-            if not user:
-                return ResendOTPResponse(
-                    success=False,
-                    message="Phone number not registered",
-                    data={"error": "PHONE_NOT_FOUND"}
-                )
-        
-        # Check rate limit
-        if not limiter.allow_request(f"login:{payload.phone}", MAX_REQUESTS_PER_WINDOW, RATE_LIMIT_WINDOW_HOURS * 3600):
-            return ResendOTPResponse(
-                success=False,
-                message="Too many OTP requests. Please try again later.",
-                data={"error": "RATE_LIMIT_EXCEEDED"}
-            )
-        
-        # Send OTP via Twilio
-        try:
-            otp_service = TwilioOTPProvider()
-            verification_sid = otp_service.send_otp(payload.phone)
-            if not verification_sid:
-                raise Exception("Failed to send OTP via Twilio")
-        except Exception as e:
-            logger.error(f"Failed to resend OTP: {e}")
-            raise HTTPException(status_code=500, detail="Failed to send OTP")
-        
-        # Track resend attempt
-        expires_at = datetime.utcnow() + timedelta(minutes=10)
-        
-        with Session(engine) as session:
-            otp_code = OTPCode(
-                phone=payload.phone,
-                otp="",  # We don't store the actual OTP
-                flow="login",
-                expires_at=expires_at
-            )
-            session.add(otp_code)
-            session.commit()
-        
-        return ResendOTPResponse(
-            success=True,
-            message="OTP resent successfully",
-            data={
-                "otp_expires_in": 600  # 10 minutes
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"Resend OTP error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+async def resend_otp(_: ResendOTPRequest):
+    return ResendOTPResponse(success=False, message="OTP flow disabled; use Firebase sign-in", data={"error": "DISABLED"})
 
 # Production monitoring endpoints
 @router.get("/health")
@@ -1196,15 +1125,12 @@ async def health_check():
             from sqlalchemy import text
             session.exec(text("SELECT 1")).first()
         
-        # Check Twilio connection
-        twilio_status = "healthy" if client else "unhealthy"
-        
         return {
             "status": "healthy",
             "timestamp": datetime.utcnow().isoformat(),
             "services": {
                 "database": "healthy",
-                "twilio": twilio_status
+            "auth": "firebase"
             },
             "version": "1.0.0"
         }
@@ -1697,4 +1623,4 @@ async def delete_account(
 # Legacy endpoints for backward compatibility
 @router.get("/ping")
 def auth_ping():
-    return {"ok": True, "twilio_configured": bool(settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_VERIFY_SERVICE_SID)}
+    return {"ok": True, "auth": "firebase"}

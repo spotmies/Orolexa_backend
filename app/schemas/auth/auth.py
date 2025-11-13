@@ -8,10 +8,13 @@ from PIL import Image
 from datetime import datetime
 
 class LoginRequest(BaseModel):
-    phone: str = Field(..., description="Phone number with country code (e.g., +1234567890)")
+    firebase_id_token: str = Field(..., description="Firebase ID token from client SDK")
+    phone: Optional[str] = Field(None, description="Phone number with country code (legacy)")
 
     @validator('phone')
     def validate_phone(cls, v):
+        if v is None:
+            return v
         phone_clean = re.sub(r'[^\d+]', '', v)
         if not re.match(r'^\+\d{1,4}\d{6,14}$', phone_clean):
             raise ValueError('Invalid phone number format. Must include country code (e.g., +1234567890)')
@@ -23,20 +26,25 @@ class LoginResponse(BaseModel):
     data: Dict[str, Any]
 
 class RegisterRequest(BaseModel):
-    name: str = Field(..., min_length=2, max_length=100, description="User's full name")
-    phone: str = Field(..., description="Phone number with country code (e.g., +1234567890)")
+    firebase_id_token: str = Field(..., description="Firebase ID token from client SDK")
+    name: Optional[str] = Field(None, min_length=2, max_length=100, description="User's full name")
+    phone: Optional[str] = Field(None, description="Phone number with country code (legacy)")
     age: Optional[int] = Field(None, ge=1, le=120, description="User's age")
     profile_image: Optional[str] = Field(None, description="Profile image (base64 encoded, file path, or data URL)")
     date_of_birth: Optional[str] = Field(None, description="Date of birth in YYYY-MM-DD format")
 
     @validator('name')
     def validate_name(cls, v):
+        if v is None:
+            return v
         if not re.match(r'^[a-zA-Z\s\-]+$', v):
             raise ValueError('Name can only contain letters, spaces, and hyphens')
         return v.strip()
 
     @validator('phone')
     def validate_phone(cls, v):
+        if v is None:
+            return v
         phone_clean = re.sub(r'[^\d+]', '', v)
         if not re.match(r'^\+\d{1,4}\d{6,14}$', phone_clean):
             raise ValueError('Invalid phone number format. Must include country code (e.g., +1234567890)')
