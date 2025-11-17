@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     
     # Firebase Settings
     FIREBASE_PROJECT_ID: str = os.environ.get("FIREBASE_PROJECT_ID", "")
-    FIREBASE_PRIVATE_KEY: str = os.environ.get("FIREBASE_PRIVATE_KEY", "").replace('\\n', '\n')
+    FIREBASE_PRIVATE_KEY: str = os.environ.get("FIREBASE_PRIVATE_KEY", "")
     FIREBASE_CLIENT_EMAIL: str = os.environ.get("FIREBASE_CLIENT_EMAIL", "")
     FIREBASE_DATABASE_URL: str = os.environ.get("FIREBASE_DATABASE_URL", "")
     
@@ -105,6 +105,8 @@ def get_settings() -> Settings:
     cors_env = os.environ.get("CORS_ORIGINS")
     if cors_env:
         s.ALLOWED_ORIGINS = cors_env
+    if s.FIREBASE_PRIVATE_KEY:
+        s.FIREBASE_PRIVATE_KEY = s.FIREBASE_PRIVATE_KEY.replace("\\n", "\n")
     return s
 
 settings: Settings = get_settings()
