@@ -41,7 +41,7 @@ A production-ready FastAPI backend for dental image analysis using Google's Gemi
 
 4. **Set up environment variables**
    ```bash
-   cp env.production.example .env
+   cp env.railway.example .env
    # Edit .env with your actual values
    ```
 
@@ -60,7 +60,7 @@ alembic upgrade head
 1. **Using Docker Compose (Recommended)**
    ```bash
    # Copy environment template
-   cp env.production.example .env
+   cp env.railway.example .env
    
    # Edit .env with production values
    nano .env
@@ -82,7 +82,7 @@ alembic upgrade head
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DEBUG` | Enable debug mode | `false` |
-| `SECRET_KEY` | JWT secret key | Required |
+| `JWT_SECRET_KEY` | JWT secret key | Required |
 | `GEMINI_API_KEY` | Google Gemini API key | Required |
 | `TWILIO_ACCOUNT_SID` | Twilio account SID | Required |
 | `TWILIO_AUTH_TOKEN` | Twilio auth token | Required |
@@ -111,10 +111,25 @@ For production deployment, update these settings in `.env`:
 
 ```bash
 DEBUG=false
-SECRET_KEY=your-super-secret-key
+JWT_SECRET_KEY=your-super-secret-key
 ALLOWED_ORIGINS=https://yourdomain.com
 BASE_URL=https://yourdomain.com
 ```
+
+### Railway Deployment (Production)
+
+Railway uses the provided `Dockerfile` and `railway.json` to build and run the API.
+
+1. **Prepare secrets locally**
+   ```bash
+   cp env.railway.example .env
+   # Fill in JWT, Twilio, Firebase, Gemini, etc.
+   ```
+2. **Connect the repo to Railway** (New Project → Deploy from GitHub).
+3. **Add environment variables** under Project Settings → Variables (Railway already injects `PORT` and, if you add a Postgres service, `DATABASE_URL`).
+4. **Deploy**. Railway runs `alembic upgrade head` before booting Gunicorn (see `railway.json`). Verify the deployment via:
+   - `https://<your-app>.up.railway.app/health`
+   - `https://<your-app>.up.railway.app/docs`
 
 ## 📚 API Documentation
 
