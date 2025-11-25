@@ -76,6 +76,13 @@ class Settings(BaseSettings):
     
     # Railway specific settings
     RAILWAY_ENVIRONMENT: str = os.environ.get("RAILWAY_ENVIRONMENT", "")
+    
+    # OTA Firmware Settings
+    FIRMWARE_DIR: str = os.environ.get("FIRMWARE_DIR", "firmware")
+    FIRMWARE_MAX_SIZE: int = int(os.environ.get("FIRMWARE_MAX_SIZE", str(10 * 1024 * 1024)))  # 10MB default
+    ADMIN_USER: str = os.environ.get("ADMIN_USER", "admin")
+    ADMIN_PASS: str = os.environ.get("ADMIN_PASS", "change-me-in-prod")
+    FIREBASE_TOPIC_ALL_USERS: str = os.environ.get("FIREBASE_TOPIC_ALL_USERS", "all-users")
 
     # Helper methods for list envs
     def _split_csv(self, value: str) -> List[str]:

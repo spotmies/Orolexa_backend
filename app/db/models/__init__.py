@@ -4,6 +4,7 @@ from .health.analysis import AnalysisHistory
 from .auth.otp import OTPCode, OTPRequest
 from .users.session import UserSession
 from .media.image import ImageStorage
+from .firmware.firmware import FirmwareMetadata, FirmwareReport
 
 __all__ = [
     "User",
@@ -11,5 +12,7 @@ __all__ = [
     "OTPCode",
     "OTPRequest",
     "UserSession",
-    "ImageStorage"
+    "ImageStorage",
+    "FirmwareMetadata",
+    "FirmwareReport"
 ]
