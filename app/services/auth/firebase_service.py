@@ -1,5 +1,6 @@
 from typing import Optional, Dict, Any
 import logging
+import re
 
 from app.core.config import settings
 
@@ -79,8 +80,11 @@ def is_test_phone_number(phone: Optional[str]) -> bool:
     test_numbers = settings.firebase_test_phone_numbers_list
     if not test_numbers:
         return False
-    # Normalize phone number for comparison (remove spaces, dashes, etc.)
-    phone_clean = phone.strip()
-    return phone_clean in test_numbers
+    # Normalize phone number for comparison (same normalization as used elsewhere in the codebase)
+    # Remove all non-digit characters except +
+    phone_clean = re.sub(r'[^\d+]', '', phone)
+    # Normalize all test numbers the same way
+    normalized_test_numbers = [re.sub(r'[^\d+]', '', num) for num in test_numbers]
+    return phone_clean in normalized_test_numbers
 
 
