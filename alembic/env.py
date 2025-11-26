@@ -16,6 +16,9 @@ if config.config_file_name is not None:
 database_url = os.getenv("DATABASE_URL")
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
+else:
+    # Fallback to default SQLite if no DATABASE_URL is set
+    config.set_main_option("sqlalchemy.url", "sqlite:///./app/orolexa.db")
 
 # add your model's MetaData object here for 'autogenerate' support
 # from app.models import SQLModel
@@ -23,7 +26,8 @@ if database_url:
 target_metadata = None
 
 def run_migrations_offline():
-    url = config.get_main_option("sqlalchemy.url")
+    # Get database URL from environment or config
+    url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
     context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
 
     with context.begin_transaction():
@@ -31,9 +35,15 @@ def run_migrations_offline():
 
 
 def run_migrations_online():
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
-        prefix="sqlalchemy.",
+    # Get database URL from environment or config
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        database_url = config.get_main_option("sqlalchemy.url")
+    
+    # Create engine directly from URL to avoid config interpolation issues
+    from sqlalchemy import create_engine
+    connectable = create_engine(
+        database_url,
         poolclass=pool.NullPool,
     )
 

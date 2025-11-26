@@ -20,7 +20,7 @@ from ..schemas import (
     UploadImageRequest, UploadImageResponse, DeleteImageResponse, DeleteAccountRequest, DeleteAccountResponse
 )
 from ..services.auth import create_jwt_token, create_refresh_token, decode_jwt_token
-from app.services.auth.firebase_service import verify_firebase_id_token, extract_user_info_from_claims
+from app.services.auth.firebase_service import verify_firebase_id_token, extract_user_info_from_claims, is_test_phone_number
 import os
 import uuid
 import shutil
@@ -846,6 +846,11 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
         if not firebase_phone:
             raise HTTPException(status_code=400, detail="Phone number not available from token or request")
 
+        # Check if this is a test phone number from Firebase
+        is_test_number = is_test_phone_number(firebase_phone)
+        if is_test_number:
+            logger.info(f"Test phone number detected: {firebase_phone} - Authorization allowed")
+
         # Ensure user exists
         with Session(engine) as session:
             user = session.exec(select(User).where(User.phone == firebase_phone)).first()
@@ -860,6 +865,8 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
                 session.add(user)
                 session.commit()
                 session.refresh(user)
+                if is_test_number:
+                    logger.info(f"Created user for test phone number: {firebase_phone}")
 
         # Issue JWTs and session
         access_token = create_jwt_token({"sub": user.id})
@@ -1035,6 +1042,11 @@ async def firebase_verify(payload: VerifyOTPRequest, response: Response, auth_se
         if not phone:
             return VerifyOTPResponse(success=False, message="Phone number not found", data={"error": "MISSING_PHONE"})
 
+        # Check if this is a test phone number from Firebase
+        is_test_number = is_test_phone_number(phone)
+        if is_test_number:
+            logger.info(f"Test phone number detected in firebase_verify: {phone} - Authorization allowed")
+
         # Find or create user
         with Session(engine) as session:
             user = session.exec(select(User).where(User.phone == phone)).first()
@@ -1049,6 +1061,8 @@ async def firebase_verify(payload: VerifyOTPRequest, response: Response, auth_se
                 session.add(user)
                 session.commit()
                 session.refresh(user)
+                if is_test_number:
+                    logger.info(f"Created user for test phone number in firebase_verify: {phone}")
 
             # Mark verified
             user.is_verified = True

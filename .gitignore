@@ -1,1 +1,5 @@
 .env
+
+# Firmware binaries (keep directory structure)
+firmware/*.bin
+firmware/*.hex

@@ -7,6 +7,8 @@ A production-ready FastAPI backend for dental image analysis using Google's Gemi
 - **AI-Powered Analysis**: Dental health assessment using Gemini 1.5 Flash
 - **Authentication**: OTP-based login/registration with Twilio
 - **Image Processing**: Multi-image upload with automatic thumbnail generation
+- **OTA Firmware Updates**: Over-the-air firmware update system for ESP32 devices
+- **Push Notifications**: Firebase Cloud Messaging for firmware update notifications
 - **Security**: JWT tokens, rate limiting, CORS protection
 - **Production Ready**: Docker containerization, health checks, logging
 - **Database**: SQLite/PostgreSQL with Alembic migrations
@@ -90,6 +92,11 @@ alembic upgrade head
 | `BASE_URL` | Base URL for image serving | `http://localhost:8000` |
 | `ALLOWED_ORIGINS` | CORS allowed origins | `*` |
 | `DATABASE_URL` | Database connection string | `sqlite:///./app/orolexa.db` |
+| `ADMIN_USER` | Admin username for firmware upload | `admin` |
+| `ADMIN_PASS` | Admin password for firmware upload | Required |
+| `FIRMWARE_DIR` | Directory for storing firmware files | `firmware` |
+| `FIRMWARE_MAX_SIZE` | Maximum firmware file size (bytes) | `10485760` (10MB) |
+| `FIREBASE_TOPIC_ALL_USERS` | Firebase topic for push notifications | `all-users` |
 
 ### Database Migrations
 
@@ -197,6 +204,92 @@ Content-Type: multipart/form-data
 full_name: John Doe
 profile_photo: [optional image file]
 ```
+
+### Firmware OTA Endpoints
+
+#### Get Latest Firmware Metadata
+```http
+GET /api/firmware/latest
+```
+
+Returns the latest active firmware version information including download URL, checksum, and release notes.
+
+**Response:**
+```json
+{
+  "version": "1.0.4",
+  "filename": "esp32p4_v1.0.4.bin",
+  "checksum": "abc123...",
+  "file_size": 1048576,
+  "url": "https://your-app.up.railway.app/api/firmware/download",
+  "release_notes": "Bug fixes and performance improvements",
+  "rollout_percent": 100,
+  "is_active": true,
+  "created_at": "2025-01-20T12:00:00Z",
+  "updated_at": "2025-01-20T12:00:00Z"
+}
+```
+
+#### Download Firmware Binary
+```http
+GET /api/firmware/download
+```
+
+Downloads the latest firmware binary file for OTA update. Returns binary data with headers:
+- `X-Firmware-Version`: Firmware version
+- `X-Firmware-Checksum`: SHA256 checksum
+- `X-Firmware-Size`: File size in bytes
+
+#### Upload Firmware (Admin Only)
+```http
+POST /api/firmware/upload
+Authorization: Basic <admin_credentials>
+Content-Type: multipart/form-data
+
+version: 1.0.4
+file: [firmware binary file]
+release_notes: Bug fixes and performance improvements (optional)
+rollout_percent: 100 (optional, 0-100)
+```
+
+Uploads a new firmware version. Requires HTTP Basic Authentication with admin credentials.
+
+**Environment Variables:**
+- `ADMIN_USER`: Admin username
+- `ADMIN_PASS`: Admin password
+
+After successful upload, automatically sends push notification to all users subscribed to the `all-users` topic.
+
+#### Report OTA Status
+```http
+POST /api/firmware/report
+Content-Type: application/json
+
+{
+  "device_id": "ESP32-ABC123",
+  "firmware_version": "1.0.4",
+  "status": "success",
+  "error_message": null,
+  "progress_percent": 100,
+  "ip_address": "192.168.1.100"
+}
+```
+
+Allows ESP32 devices to report their OTA update status. Status can be:
+- `success`: Update completed successfully
+- `failed`: Update failed (include `error_message`)
+- `in_progress`: Update in progress (include `progress_percent`)
+
+#### Get OTA Reports (Admin Only)
+```http
+GET /api/firmware/reports?device_id=ESP32-ABC123&firmware_version=1.0.4&limit=100
+Authorization: Basic <admin_credentials>
+```
+
+Retrieves OTA status reports from devices. Optional query parameters:
+- `device_id`: Filter by device ID
+- `firmware_version`: Filter by firmware version
+- `limit`: Maximum number of reports (default: 100)
 
 ### Utility Endpoints
 
@@ -311,6 +404,96 @@ gcloud run deploy dental-ai-api \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated
+```
+
+## 🔄 OTA Firmware Update System
+
+The backend includes a complete Over-The-Air (OTA) firmware update system for ESP32 devices.
+
+### Setup
+
+1. **Configure Environment Variables**
+   ```bash
+   ADMIN_USER=your_admin_username
+   ADMIN_PASS=your_secure_password
+   FIRMWARE_DIR=firmware
+   FIRMWARE_MAX_SIZE=10485760  # 10MB
+   FIREBASE_TOPIC_ALL_USERS=all-users
+   ```
+
+2. **Run Database Migration**
+   ```bash
+   alembic upgrade head
+   ```
+   This creates the `firmware_metadata` and `firmware_reports` tables.
+
+3. **Firebase Configuration**
+   Ensure Firebase credentials are configured:
+   - `FIREBASE_PROJECT_ID`
+   - `FIREBASE_PRIVATE_KEY`
+   - `FIREBASE_CLIENT_EMAIL`
+
+### Usage
+
+#### Uploading Firmware
+
+```bash
+curl -X POST "https://your-app.up.railway.app/api/firmware/upload" \
+  -u "admin:password" \
+  -F "version=1.0.4" \
+  -F "file=@esp32p4_v1.0.4.bin" \
+  -F "release_notes=Bug fixes and performance improvements"
+```
+
+After upload, a push notification is automatically sent to all users subscribed to the `all-users` topic.
+
+#### ESP32 Integration
+
+Your ESP32 device should:
+
+1. **Check for Updates**: Periodically call `GET /api/firmware/latest` to check for new versions
+2. **Download Firmware**: Call `GET /api/firmware/download` to download the binary
+3. **Verify Checksum**: Compare downloaded file SHA256 with metadata checksum
+4. **Report Status**: After OTA completion, call `POST /api/firmware/report` with status
+
+Example ESP32 code structure:
+```c
+// Check for updates
+esp_http_client_config_t config = {
+    .url = "https://your-app.up.railway.app/api/firmware/latest",
+    .timeout_ms = 10000,
+};
+
+// Download firmware
+esp_https_ota_config_t ota_config = {
+    .http_config = &config,
+};
+
+esp_err_t ret = esp_https_ota(&ota_config);
+```
+
+#### React Native App Integration
+
+1. **Subscribe to Topic**: When app starts, subscribe FCM token to `all-users` topic
+2. **Handle Notifications**: When push notification received, show update prompt
+3. **Connect to Device**: Use BLE or Wi-Fi to connect to ESP32
+4. **Trigger OTA**: Send command to device to start OTA update
+5. **Monitor Progress**: Poll device for OTA progress and display to user
+
+### Security Features
+
+- **Admin Authentication**: HTTP Basic Auth required for upload endpoints
+- **Checksum Verification**: SHA256 checksum computed and stored for each firmware
+- **File Validation**: File type and size validation
+- **HTTPS Required**: All endpoints use HTTPS in production
+- **Version Control**: Prevents duplicate version uploads
+
+### Monitoring
+
+View OTA reports via admin endpoint:
+```bash
+curl -u "admin:password" \
+  "https://your-app.up.railway.app/api/firmware/reports?limit=50"
 ```
 
 ## 🔧 Development

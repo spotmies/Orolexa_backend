@@ -13,7 +13,8 @@ from app.db.session import create_db_and_tables
 from app.routers import (
     auth_router,
     analysis_router,
-    health_analytics_router
+    health_analytics_router,
+    firmware_router
 )
 
 # Configure logging
@@ -68,6 +69,7 @@ if os.path.exists("uploads"):
 app.include_router(auth_router.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(analysis_router.router, prefix="/api/analysis", tags=["Analysis"])
 app.include_router(health_analytics_router.router, prefix="/api/health", tags=["Health Analytics"])
+app.include_router(firmware_router.router, prefix="/api/firmware", tags=["Firmware OTA"])
 
 # Global exception handler
 @app.exception_handler(Exception)

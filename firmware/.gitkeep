@@ -1,0 +1,3 @@
+# This file ensures the firmware directory is tracked by git
+# Firmware binaries (*.bin, *.hex) are ignored via .gitignore
+

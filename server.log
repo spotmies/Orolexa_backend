@@ -1,0 +1,87 @@
+2025-11-17 16:10:37,476 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-11-17 16:10:37,478 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("users")
+2025-11-17 16:10:37,479 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:10:37,482 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("analysis_history")
+2025-11-17 16:10:37,483 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:10:37,485 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("otp_codes")
+2025-11-17 16:10:37,486 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:10:37,488 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("otp_requests")
+2025-11-17 16:10:37,489 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:10:37,491 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("user_sessions")
+2025-11-17 16:10:37,492 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:10:37,493 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("image_storage")
+2025-11-17 16:10:37,494 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:10:37,495 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:57362 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57861 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57861 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57861 - "GET /openapi.json HTTP/1.1" 200 OK
+2025-11-17 16:22:30,106 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-11-17 16:22:30,216 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.phone, users.country_code, users.age, users.date_of_birth, users.profile_image_url, users.profile_image_id, users.email, users.is_verified, users.is_active, users.created_at, users.updated_at 
+FROM users 
+WHERE users.phone = ?
+2025-11-17 16:22:30,218 INFO sqlalchemy.engine.Engine [generated in 0.00169s] ('+917730831829',)
+2025-11-17 16:22:30,220 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     127.0.0.1:58488 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+2025-11-17 16:45:19,378 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-11-17 16:45:19,379 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.phone, users.country_code, users.age, users.date_of_birth, users.profile_image_url, users.profile_image_id, users.email, users.is_verified, users.is_active, users.created_at, users.updated_at 
+FROM users 
+WHERE users.phone = ?
+2025-11-17 16:45:19,380 INFO sqlalchemy.engine.Engine [cached since 1369s ago] ('+917730831829',)
+2025-11-17 16:45:19,382 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     127.0.0.1:60484 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+2025-11-17 16:46:12,464 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-11-17 16:46:12,465 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.phone, users.country_code, users.age, users.date_of_birth, users.profile_image_url, users.profile_image_id, users.email, users.is_verified, users.is_active, users.created_at, users.updated_at 
+FROM users 
+WHERE users.phone = ?
+2025-11-17 16:46:12,466 INFO sqlalchemy.engine.Engine [cached since 1422s ago] ('+917730831829',)
+2025-11-17 16:46:12,467 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     127.0.0.1:60543 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+  2025-11-17 16:50:19,351 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-11-17 16:50:19,351 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("users")
+2025-11-17 16:50:19,352 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:50:19,354 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("analysis_history")
+2025-11-17 16:50:19,354 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:50:19,355 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("otp_codes")
+2025-11-17 16:50:19,357 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:50:19,358 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("otp_requests")
+2025-11-17 16:50:19,359 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:50:19,359 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("user_sessions")
+2025-11-17 16:50:19,360 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:50:19,361 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("image_storage")
+2025-11-17 16:50:19,361 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:50:19,362 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:60982 - "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 Not Found
+2025-11-17 16:50:19,379 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-11-17 16:50:19,395 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.phone, users.country_code, users.age, users.date_of_birth, users.profile_image_url, users.profile_image_id, users.email, users.is_verified, users.is_active, users.created_at, users.updated_at 
+FROM users 
+WHERE users.phone = ?
+2025-11-17 16:50:19,396 INFO sqlalchemy.engine.Engine [generated in 0.00086s] ('+917730831829',)
+2025-11-17 16:50:19,398 INFO sqlalchemy.engine.Engine ROLLBACK
+2025-11-17 16:50:20,145 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-11-17 16:50:20,146 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.phone, users.country_code, users.age, users.date_of_birth, users.profile_image_url, users.profile_image_id, users.email, users.is_verified, users.is_active, users.created_at, users.updated_at 
+FROM users 
+WHERE users.phone = ?
+2025-11-17 16:50:20,147 INFO sqlalchemy.engine.Engine [cached since 0.7512s ago] ('+917730831829',)
+2025-11-17 16:50:20,149 INFO sqlalchemy.engine.Engine ROLLBACK
+2025-11-17 16:50:20,150 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-11-17 16:50:20,153 INFO sqlalchemy.engine.Engine INSERT INTO user_sessions (id, user_id, token, refresh_token, device_info, ip_address, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+2025-11-17 16:50:20,153 INFO sqlalchemy.engine.Engine [generated in 0.00072s] ('c74c5d3a-22b4-4ff6-b55b-3ee52e332177', 'fe195897-59b3-4555-8c2c-c188c94c6bee', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmZTE5NTg5Ny01OWIzLTQ1NTUtOGMyYy1jMTg4Yzk0YzZiZWUiLCJleHAiOjE3NjMzODIwMjB9.1bFbo1rwIFUe3F_iIGI8I991E5F3Aw56FHp4h0JhHNw', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmZTE5NTg5Ny01OWIzLTQ1NTUtOGMyYy1jMTg4Yzk0YzZiZWUiLCJleHAiOjE3NjU5NzA0MjAsInR5cGUiOiJyZWZyZXNoIn0.4en1IgbuUuLCmZ6dFPt4-HfZTML5KpgwkrdTftLQwZk', None, None, '2025-12-17 11:20:20.149094', '2025-11-17 11:20:20.150094')
+2025-11-17 16:50:20,156 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:60979 - "POST /api/auth/login HTTP/1.1" 200 OK
+ 2025-11-17 16:51:37,594 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-11-17 16:51:37,596 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("users")
+2025-11-17 16:51:37,596 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:51:37,598 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("analysis_history")
+2025-11-17 16:51:37,600 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:51:37,601 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("otp_codes")
+2025-11-17 16:51:37,601 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:51:37,602 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("otp_requests")
+2025-11-17 16:51:37,603 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:51:37,604 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("user_sessions")
+2025-11-17 16:51:37,604 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:51:37,605 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("image_storage")
+2025-11-17 16:51:37,606 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-11-17 16:51:37,607 INFO sqlalchemy.engine.Engine COMMIT
+INFO:     127.0.0.1:61445 - "GET /api/auth/profile/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61446 - "GET /api/auth/profile/me HTTP/1.1" 401 Unauthorized

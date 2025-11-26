@@ -63,11 +63,24 @@ def verify_firebase_id_token(id_token: str) -> Optional[Dict[str, Any]]:
 
 def extract_user_info_from_claims(claims: Dict[str, Any]) -> Dict[str, Optional[str]]:
     """Extract phone number, uid, and display name from Firebase claims."""
+    phone = claims.get("phone_number")
     return {
         "uid": claims.get("uid") or claims.get("sub"),
-        "phone": claims.get("phone_number"),
+        "phone": phone,
         "name": claims.get("name"),
         "email": claims.get("email"),
     }
+
+
+def is_test_phone_number(phone: Optional[str]) -> bool:
+    """Check if a phone number is configured as a test number in Firebase."""
+    if not phone:
+        return False
+    test_numbers = settings.firebase_test_phone_numbers_list
+    if not test_numbers:
+        return False
+    # Normalize phone number for comparison (remove spaces, dashes, etc.)
+    phone_clean = phone.strip()
+    return phone_clean in test_numbers
 
 
