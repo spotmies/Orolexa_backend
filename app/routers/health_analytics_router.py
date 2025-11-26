@@ -17,7 +17,13 @@ router = APIRouter(prefix="/health", tags=["Health & Analytics"])
 
 oauth2_scheme = HTTPBearer()
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)):
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)) -> str:
+    """
+    Extract current user ID from JWT token.
+
+    Note: User IDs in this project are UUID strings (not integers), so we
+    return the raw `sub` claim without casting.
+    """
     token = credentials.credentials
     payload = decode_jwt_token(token)
     if not payload:
@@ -25,14 +31,11 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(oauth2_
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token: missing user ID")
-    try:
-        return int(user_id)
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=401, detail="Invalid token: invalid user ID format")
+    return user_id
 
 
 @router.get("/summary", response_model=HealthSummary)
-def get_health_summary(current_user: int = Depends(get_current_user), session: Session = Depends(get_session)):
+def get_health_summary(current_user: str = Depends(get_current_user), session: Session = Depends(get_session)):
     try:
         total_analyses = session.exec(select(func.count(AnalysisHistory.id)).where(AnalysisHistory.user_id == current_user)).first() or 0
         last_analysis = session.exec(select(AnalysisHistory).where(AnalysisHistory.user_id == current_user).order_by(AnalysisHistory.created_at.desc())).first()
