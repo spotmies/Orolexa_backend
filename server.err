@@ -1,0 +1,319 @@
+C:\Users\ADMIN\Dev\Orolexa_backend\app\main.py:108: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+C:\Users\ADMIN\Dev\Orolexa_backend\app\main.py:122: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("shutdown")
+INFO:     Will watch for changes in these directories: ['C:\\Users\\ADMIN\\Dev\\Orolexa_backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [20404] using WatchFiles
+INFO:     Started server process [20380]
+INFO:     Waiting for application startup.
+2025-11-17 16:10:37,474 - app.main - INFO - Starting Dental AI API v1.0.0
+2025-11-17 16:10:37,476 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2025-11-17 16:10:37,478 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("users")
+2025-11-17 16:10:37,479 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:10:37,482 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("analysis_history")
+2025-11-17 16:10:37,483 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:10:37,485 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("otp_codes")
+2025-11-17 16:10:37,486 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:10:37,488 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("otp_requests")
+2025-11-17 16:10:37,489 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:10:37,491 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("user_sessions")
+2025-11-17 16:10:37,492 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:10:37,493 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("image_storage")
+2025-11-17 16:10:37,494 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:10:37,495 - sqlalchemy.engine.Engine - INFO - COMMIT
+2025-11-17 16:10:37,496 - app.db.session - INFO - Database tables created successfully
+2025-11-17 16:10:37,496 - app.main - INFO - Database tables created successfully
+INFO:     Application startup complete.
+2025-11-17 16:10:44,628 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:10:55,230 - app.main - INFO - Request: GET /health from 127.0.0.1
+2025-11-17 16:10:55,235 - app.main - INFO - Response: 200 in 0.005s
+2025-11-17 16:11:13,032 - watchfiles.main - INFO - 2 changes detected
+2025-11-17 16:11:13,392 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:14:30,458 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:14:31,221 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:15:05,667 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:15:14,485 - app.main - INFO - Request: GET / from 127.0.0.1
+2025-11-17 16:15:14,490 - app.main - INFO - Response: 200 in 0.005s
+2025-11-17 16:15:18,039 - app.main - INFO - Request: GET /docs from 127.0.0.1
+2025-11-17 16:15:18,040 - app.main - INFO - Response: 200 in 0.002s
+2025-11-17 16:15:18,513 - app.main - INFO - Request: GET /openapi.json from 127.0.0.1
+2025-11-17 16:15:18,631 - app.main - INFO - Response: 200 in 0.118s
+2025-11-17 16:19:30,465 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:19:31,990 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:22:30,095 - app.main - INFO - Request: POST /api/auth/login from 127.0.0.1
+2025-11-17 16:22:30,103 - app.services.rate_limit.rate_limit_service - INFO - Using memory-based rate limiting
+2025-11-17 16:22:30,106 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2025-11-17 16:22:30,216 - sqlalchemy.engine.Engine - INFO - SELECT users.id, users.name, users.phone, users.country_code, users.age, users.date_of_birth, users.profile_image_url, users.profile_image_id, users.email, users.is_verified, users.is_active, users.created_at, users.updated_at 
+FROM users 
+WHERE users.phone = ?
+2025-11-17 16:22:30,218 - sqlalchemy.engine.Engine - INFO - [generated in 0.00169s] ('+917730831829',)
+2025-11-17 16:22:30,220 - sqlalchemy.engine.Engine - INFO - ROLLBACK
+2025-11-17 16:22:30,221 - app.services.auth.firebase_service - ERROR - Failed to initialize Firebase app: Failed to initialize a certificate credential. Caused by: "Unable to load PEM file. See https://cryptography.io/en/latest/faq/#why-can-t-i-import-my-pem-file for more details. InvalidData(InvalidByte(0, 92))"
+2025-11-17 16:22:30,221 - app.main - INFO - Response: 401 in 0.126s
+2025-11-17 16:24:30,482 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:24:31,149 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:29:30,486 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:29:31,212 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:34:30,490 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:34:32,027 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:39:30,446 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:39:31,167 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:44:30,472 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:44:31,244 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:45:19,370 - app.main - INFO - Request: POST /api/auth/login from 127.0.0.1
+2025-11-17 16:45:19,377 - app.services.rate_limit.rate_limit_service - INFO - Using memory-based rate limiting
+2025-11-17 16:45:19,378 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2025-11-17 16:45:19,379 - sqlalchemy.engine.Engine - INFO - SELECT users.id, users.name, users.phone, users.country_code, users.age, users.date_of_birth, users.profile_image_url, users.profile_image_id, users.email, users.is_verified, users.is_active, users.created_at, users.updated_at 
+FROM users 
+WHERE users.phone = ?
+2025-11-17 16:45:19,380 - sqlalchemy.engine.Engine - INFO - [cached since 1369s ago] ('+917730831829',)
+2025-11-17 16:45:19,382 - sqlalchemy.engine.Engine - INFO - ROLLBACK
+2025-11-17 16:45:19,382 - app.services.auth.firebase_service - ERROR - Failed to initialize Firebase app: Failed to initialize a certificate credential. Caused by: "Unable to load PEM file. See https://cryptography.io/en/latest/faq/#why-can-t-i-import-my-pem-file for more details. InvalidData(InvalidByte(0, 92))"
+2025-11-17 16:45:19,383 - app.main - INFO - Response: 401 in 0.013s
+2025-11-17 16:46:12,457 - app.main - INFO - Request: POST /api/auth/login from 127.0.0.1
+2025-11-17 16:46:12,463 - app.services.rate_limit.rate_limit_service - INFO - Using memory-based rate limiting
+2025-11-17 16:46:12,464 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2025-11-17 16:46:12,465 - sqlalchemy.engine.Engine - INFO - SELECT users.id, users.name, users.phone, users.country_code, users.age, users.date_of_birth, users.profile_image_url, users.profile_image_id, users.email, users.is_verified, users.is_active, users.created_at, users.updated_at 
+FROM users 
+WHERE users.phone = ?
+2025-11-17 16:46:12,466 - sqlalchemy.engine.Engine - INFO - [cached since 1422s ago] ('+917730831829',)
+2025-11-17 16:46:12,467 - sqlalchemy.engine.Engine - INFO - ROLLBACK
+2025-11-17 16:46:12,468 - app.services.auth.firebase_service - ERROR - Failed to initialize Firebase app: Failed to initialize a certificate credential. Caused by: "Unable to load PEM file. See https://cryptography.io/en/latest/faq/#why-can-t-i-import-my-pem-file for more details. InvalidData(InvalidByte(0, 92))"
+2025-11-17 16:46:12,468 - app.main - INFO - Response: 401 in 0.012s
+2025-11-17 16:47:26,187 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:49:30,486 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:49:32,020 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:49:46,379 - watchfiles.main - INFO - 1 change detected
+WARNING:  WatchFiles detected changes in 'app\core\config.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-17 16:50:11,167 - app.main - INFO - Shutting down Dental AI API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [20380]
+2025-11-17 16:50:12,004 - watchfiles.main - INFO - 1 change detected
+WARNING:  WatchFiles detected changes in 'app\core\config.py'. Reloading...
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python311\Lib\multiprocessing\spawn.py", line 122, in spawn_main
+    exitcode = _main(fd, parent_sentinel)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python311\Lib\multiprocessing\spawn.py", line 131, in _main
+    prepare(preparation_data)
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python311\Lib\multiprocessing\spawn.py", line 244, in prepare
+    _fixup_main_from_name(data['init_main_from_name'])
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python311\Lib\multiprocessing\spawn.py", line 268, in _fixup_main_from_name
+    main_content = runpy.run_module(mod_name,
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen runpy>", line 226, in run_module
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\ADMIN\Dev\Orolexa_backend\app\main.py", line 12, in <module>
+    from app.db.session import create_db_and_tables
+  File "C:\Users\ADMIN\Dev\Orolexa_backend\app\db\session.py", line 2, in <module>
+    from sqlmodel import SQLModel, create_engine, Session
+  File "C:\Users\ADMIN\Dev\Orolexa_backend\.venv\Lib\site-packages\sqlmodel\__init__.py", line 4, in <module>
+    from sqlalchemy.engine import create_engine as create_engine
+  File "C:\Users\ADMIN\Dev\Orolexa_backend\.venv\Lib\site-packages\sqlalchemy\__init__.py", line 12, in <module>
+    from . import util as _util
+  File "C:\Users\ADMIN\Dev\Orolexa_backend\.venv\Lib\site-packages\sqlalchemy\util\__init__.py", line 14, in <module>
+    from ._collections import coerce_generator_arg as coerce_generator_arg
+  File "C:\Users\ADMIN\Dev\Orolexa_backend\.venv\Lib\site-packages\sqlalchemy\util\_collections.py", line 38, in <module>
+    from ._has_cy import HAS_CYEXTENSION
+  File "C:\Users\ADMIN\Dev\Orolexa_backend\.venv\Lib\site-packages\sqlalchemy\util\_has_cy.py", line 32, in <module>
+    _import_cy_extensions()
+  File "C:\Users\ADMIN\Dev\Orolexa_backend\.venv\Lib\site-packages\sqlalchemy\util\_has_cy.py", line 20, in _import_cy_extensions
+    from ..cyextension import util
+  File "lib/sqlalchemy/cyextension/util.pyx", line 9, in init sqlalchemy.cyextension.util
+  File "C:\Users\ADMIN\Dev\Orolexa_backend\.venv\Lib\site-packages\sqlalchemy\exc.py", line 26, in <module>
+    from .util import compat
+  File "C:\Users\ADMIN\Dev\Orolexa_backend\.venv\Lib\site-packages\sqlalchemy\util\compat.py", line 50, in <module>
+    arm = "aarch" in platform.machine().lower()
+                     ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python311\Lib\platform.py", line 958, in machine
+    return uname().machine
+           ^^^^^^^
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python311\Lib\platform.py", line 856, in uname
+    release, version, csd, ptype = win32_ver()
+                                   ^^^^^^^^^^^
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python311\Lib\platform.py", line 371, in win32_ver
+    major, minor, build = map(int, _syscmd_ver()[2].split('.'))
+                                   ^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python311\Lib\platform.py", line 284, in _syscmd_ver
+    info = subprocess.check_output(cmd,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python311\Lib\subprocess.py", line 466, in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python311\Lib\subprocess.py", line 550, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python311\Lib\subprocess.py", line 1196, in communicate
+    stdout = self.stdout.read()
+             ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 22, in decode
+    def decode(self, input, final=False):
+
+KeyboardInterrupt
+2025-11-17 16:50:13,731 - watchfiles.main - INFO - 5 changes detected
+INFO:     Started server process [23384]
+INFO:     Waiting for application startup.
+2025-11-17 16:50:19,347 - app.main - INFO - Starting Dental AI API v1.0.0
+2025-11-17 16:50:19,351 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2025-11-17 16:50:19,351 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("users")
+2025-11-17 16:50:19,352 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:50:19,354 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("analysis_history")
+2025-11-17 16:50:19,354 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:50:19,355 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("otp_codes")
+2025-11-17 16:50:19,357 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:50:19,358 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("otp_requests")
+2025-11-17 16:50:19,359 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:50:19,359 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("user_sessions")
+2025-11-17 16:50:19,360 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:50:19,361 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("image_storage")
+2025-11-17 16:50:19,361 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:50:19,362 - sqlalchemy.engine.Engine - INFO - COMMIT
+2025-11-17 16:50:19,363 - app.db.session - INFO - Database tables created successfully
+2025-11-17 16:50:19,363 - app.main - INFO - Database tables created successfully
+INFO:     Application startup complete.
+2025-11-17 16:50:19,372 - app.main - INFO - Request: GET /.well-known/appspecific/com.chrome.devtools.json from 127.0.0.1
+2025-11-17 16:50:19,372 - app.main - INFO - Request: POST /api/auth/login from 127.0.0.1
+2025-11-17 16:50:19,374 - app.main - INFO - Response: 404 in 0.002s
+2025-11-17 16:50:19,377 - app.services.rate_limit.rate_limit_service - INFO - Using memory-based rate limiting
+2025-11-17 16:50:19,379 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2025-11-17 16:50:19,395 - sqlalchemy.engine.Engine - INFO - SELECT users.id, users.name, users.phone, users.country_code, users.age, users.date_of_birth, users.profile_image_url, users.profile_image_id, users.email, users.is_verified, users.is_active, users.created_at, users.updated_at 
+FROM users 
+WHERE users.phone = ?
+2025-11-17 16:50:19,396 - sqlalchemy.engine.Engine - INFO - [generated in 0.00086s] ('+917730831829',)
+2025-11-17 16:50:19,398 - sqlalchemy.engine.Engine - INFO - ROLLBACK
+2025-11-17 16:50:19,472 - app.services.auth.firebase_service - INFO - Firebase app initialized
+2025-11-17 16:50:20,145 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2025-11-17 16:50:20,146 - sqlalchemy.engine.Engine - INFO - SELECT users.id, users.name, users.phone, users.country_code, users.age, users.date_of_birth, users.profile_image_url, users.profile_image_id, users.email, users.is_verified, users.is_active, users.created_at, users.updated_at 
+FROM users 
+WHERE users.phone = ?
+2025-11-17 16:50:20,147 - sqlalchemy.engine.Engine - INFO - [cached since 0.7512s ago] ('+917730831829',)
+2025-11-17 16:50:20,149 - sqlalchemy.engine.Engine - INFO - ROLLBACK
+2025-11-17 16:50:20,150 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2025-11-17 16:50:20,153 - sqlalchemy.engine.Engine - INFO - INSERT INTO user_sessions (id, user_id, token, refresh_token, device_info, ip_address, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+2025-11-17 16:50:20,153 - sqlalchemy.engine.Engine - INFO - [generated in 0.00072s] ('c74c5d3a-22b4-4ff6-b55b-3ee52e332177', 'fe195897-59b3-4555-8c2c-c188c94c6bee', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmZTE5NTg5Ny01OWIzLTQ1NTUtOGMyYy1jMTg4Yzk0YzZiZWUiLCJleHAiOjE3NjMzODIwMjB9.1bFbo1rwIFUe3F_iIGI8I991E5F3Aw56FHp4h0JhHNw', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmZTE5NTg5Ny01OWIzLTQ1NTUtOGMyYy1jMTg4Yzk0YzZiZWUiLCJleHAiOjE3NjU5NzA0MjAsInR5cGUiOiJyZWZyZXNoIn0.4en1IgbuUuLCmZ6dFPt4-HfZTML5KpgwkrdTftLQwZk', None, None, '2025-12-17 11:20:20.149094', '2025-11-17 11:20:20.150094')
+2025-11-17 16:50:20,156 - sqlalchemy.engine.Engine - INFO - COMMIT
+2025-11-17 16:50:20,161 - app.main - INFO - Response: 200 in 0.789s
+2025-11-17 16:50:20,226 - watchfiles.main - INFO - 3 changes detected
+2025-11-17 16:50:54,840 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:51:30,002 - watchfiles.main - INFO - 1 change detected
+WARNING:  WatchFiles detected changes in 'app\core\config.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-11-17 16:51:34,059 - app.main - INFO - Shutting down Dental AI API
+INFO:     Application shutdown complete.
+INFO:     Finished server process [23384]
+2025-11-17 16:51:35,438 - watchfiles.main - INFO - 5 changes detected
+INFO:     Started server process [22372]
+INFO:     Waiting for application startup.
+2025-11-17 16:51:37,591 - app.main - INFO - Starting Dental AI API v1.0.0
+2025-11-17 16:51:37,594 - sqlalchemy.engine.Engine - INFO - BEGIN (implicit)
+2025-11-17 16:51:37,596 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("users")
+2025-11-17 16:51:37,596 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:51:37,598 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("analysis_history")
+2025-11-17 16:51:37,600 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:51:37,601 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("otp_codes")
+2025-11-17 16:51:37,601 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:51:37,602 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("otp_requests")
+2025-11-17 16:51:37,603 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:51:37,604 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("user_sessions")
+2025-11-17 16:51:37,604 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:51:37,605 - sqlalchemy.engine.Engine - INFO - PRAGMA main.table_info("image_storage")
+2025-11-17 16:51:37,606 - sqlalchemy.engine.Engine - INFO - [raw sql] ()
+2025-11-17 16:51:37,607 - sqlalchemy.engine.Engine - INFO - COMMIT
+2025-11-17 16:51:37,607 - app.db.session - INFO - Database tables created successfully
+2025-11-17 16:51:37,608 - app.main - INFO - Database tables created successfully
+INFO:     Application startup complete.
+2025-11-17 16:54:30,699 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:54:32,036 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:55:00,545 - app.main - INFO - Request: GET /api/auth/profile/me from 127.0.0.1
+2025-11-17 16:55:00,549 - app.routers.auth_router_impl - ERROR - Error getting current user: 401: Invalid authorization header
+2025-11-17 16:55:00,550 - app.main - INFO - Response: 401 in 0.005s
+2025-11-17 16:55:26,495 - app.main - INFO - Request: GET /api/auth/profile/me from 127.0.0.1
+2025-11-17 16:55:26,499 - app.routers.auth_router_impl - ERROR - Error getting current user: 401: Invalid authorization header
+2025-11-17 16:55:26,500 - app.main - INFO - Response: 401 in 0.005s
+2025-11-17 16:59:30,540 - watchfiles.main - INFO - 1 change detected
+2025-11-17 16:59:31,207 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:04:30,505 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:04:31,270 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:09:30,515 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:09:31,901 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:13:38,983 - watchfiles.main - INFO - 2 changes detected
+2025-11-17 17:14:30,549 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:14:31,270 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:14:58,157 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:14:58,522 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:15:43,847 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:15:56,115 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:16:12,659 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:16:20,228 - watchfiles.main - INFO - 2 changes detected
+2025-11-17 17:18:09,054 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:18:36,413 - watchfiles.main - INFO - 9 changes detected
+2025-11-17 17:18:42,990 - watchfiles.main - INFO - 5 changes detected
+2025-11-17 17:18:44,378 - watchfiles.main - INFO - 5 changes detected
+2025-11-17 17:18:45,402 - watchfiles.main - INFO - 5 changes detected
+2025-11-17 17:18:46,635 - watchfiles.main - INFO - 10 changes detected
+2025-11-17 17:18:48,331 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:18:51,700 - watchfiles.main - INFO - 38 changes detected
+2025-11-17 17:19:09,210 - watchfiles.main - INFO - 2 changes detected
+2025-11-17 17:19:13,084 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:19:13,443 - watchfiles.main - INFO - 7 changes detected
+2025-11-17 17:19:13,805 - watchfiles.main - INFO - 5 changes detected
+2025-11-17 17:19:30,519 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:19:31,435 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:19:31,800 - watchfiles.main - INFO - 5 changes detected
+2025-11-17 17:19:37,657 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:19:39,145 - watchfiles.main - INFO - 66 changes detected
+2025-11-17 17:19:39,511 - watchfiles.main - INFO - 21 changes detected
+2025-11-17 17:19:54,968 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:19:55,336 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:19:57,182 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:19:57,546 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:19:57,911 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:20:01,280 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:20:01,642 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:20:02,010 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:21:27,245 - watchfiles.main - INFO - 14 changes detected
+2025-11-17 17:21:40,416 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:21:41,603 - watchfiles.main - INFO - 13 changes detected
+2025-11-17 17:21:41,964 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:21:44,074 - watchfiles.main - INFO - 6 changes detected
+2025-11-17 17:24:30,577 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:24:31,289 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:29:30,547 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:29:32,948 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:34:30,553 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:34:31,275 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:39:30,589 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:39:31,315 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:44:30,574 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:44:32,769 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:49:30,593 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:49:31,317 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:54:30,604 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:54:31,325 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:59:30,622 - watchfiles.main - INFO - 1 change detected
+2025-11-17 17:59:31,954 - watchfiles.main - INFO - 1 change detected
+2025-11-17 18:04:30,589 - watchfiles.main - INFO - 1 change detected
+2025-11-17 18:04:31,302 - watchfiles.main - INFO - 1 change detected
+2025-11-17 18:09:30,626 - watchfiles.main - INFO - 1 change detected
+2025-11-17 18:09:31,338 - watchfiles.main - INFO - 1 change detected
+2025-11-17 18:14:30,629 - watchfiles.main - INFO - 1 change detected
+2025-11-17 18:14:31,351 - watchfiles.main - INFO - 1 change detected
+2025-11-17 18:19:30,635 - watchfiles.main - INFO - 1 change detected
+2025-11-17 18:19:32,018 - watchfiles.main - INFO - 1 change detected
+2025-11-17 18:22:59,062 - watchfiles.main - INFO - 1 change detected
