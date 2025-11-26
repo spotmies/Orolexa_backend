@@ -1485,19 +1485,49 @@ async def upload_profile_image(
         request_id = str(uuid.uuid4())
         client_info = get_client_info(request) if request else {}
         
-        profile_image_id = image_service.upload_profile_base64(current_user.id, payload.image)
-        
+        profile_image_url = image_service.upload_profile_base64(current_user.id, payload.image)
+        if not profile_image_url:
+            raise HTTPException(status_code=400, detail="Invalid image data")
+
+        # Persist on user record
+        with Session(engine) as session:
+            user = session.exec(select(User).where(User.id == current_user.id)).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+
+            user.profile_image_url = profile_image_url
+            # Store in profile_image_id as well for backwards compatibility / analytics
+            user.profile_image_id = profile_image_url
+            user.updated_at = datetime.utcnow()
+
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+
         # Audit logging
         audit = get_audit_logger()
-        audit.log('profile_image_upload', current_user.phone, current_user.id, request_id, 
+        audit.log('profile_image_upload', user.phone, user.id, request_id, 
                   client_info.get('ip_address'), success=True)
-        
+
+        # Build full updated profile response
+        user_response = UserResponse(
+            id=user.id,
+            name=user.name,
+            phone=user.phone,
+            age=user.age,
+            profile_image_url=user.profile_image_url,
+            date_of_birth=user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else None,
+            created_at=user.created_at,
+            updated_at=user.updated_at
+        )
+
         return UploadImageResponse(
             success=True,
             message="Image uploaded successfully",
             data={
-                "image_url": f"/api/auth/profile/image/{current_user.id}",
-                "image_id": profile_image_id
+                "image_url": user.profile_image_url,
+                "image_id": user.profile_image_id,
+                "user": user_response.dict(),
             }
         )
         
@@ -1521,19 +1551,49 @@ async def upload_profile_file(
         request_id = str(uuid.uuid4())
         client_info = get_client_info(request) if request else {}
         
-        profile_image_id = image_service.upload_profile_file(current_user.id, file)
-        
+        profile_image_url = image_service.upload_profile_file(current_user.id, file)
+        if not profile_image_url:
+            raise HTTPException(status_code=400, detail="Invalid image file")
+
+        # Persist on user record
+        with Session(engine) as session:
+            user = session.exec(select(User).where(User.id == current_user.id)).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+
+            user.profile_image_url = profile_image_url
+            # Store in profile_image_id as well for backwards compatibility / analytics
+            user.profile_image_id = profile_image_url
+            user.updated_at = datetime.utcnow()
+
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+
         # Audit logging
         audit = get_audit_logger()
-        audit.log('profile_file_upload', current_user.phone, current_user.id, request_id, 
+        audit.log('profile_file_upload', user.phone, user.id, request_id, 
                   client_info.get('ip_address'), success=True)
-        
+
+        # Build full updated profile response
+        user_response = UserResponse(
+            id=user.id,
+            name=user.name,
+            phone=user.phone,
+            age=user.age,
+            profile_image_url=user.profile_image_url,
+            date_of_birth=user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else None,
+            created_at=user.created_at,
+            updated_at=user.updated_at
+        )
+
         return UploadImageResponse(
             success=True,
             message="Image uploaded successfully",
             data={
-                "image_url": f"/api/auth/profile/image/{current_user.id}",
-                "image_id": profile_image_id
+                "image_url": user.profile_image_url,
+                "image_id": user.profile_image_id,
+                "user": user_response.dict(),
             }
         )
         
