@@ -1228,13 +1228,24 @@ async def get_profile_image(identifier: str, current_user: User = Depends(get_cu
                 select(User).where(User.id == current_user.id)
             ).first()
 
-            if user and user.profile_image_url and os.path.exists(user.profile_image_url):
-                # Serve the latest profile image file
-                return FileResponse(
-                    user.profile_image_url,
-                    media_type="image/jpeg",
-                    headers={"Cache-Control": "public, max-age=31536000"},  # Cache for 1 year
-                )
+            if user and user.profile_image_url:
+                # Convert stored URL (/uploads/...) to actual filesystem path
+                image_url = user.profile_image_url
+                if image_url.startswith("/uploads/"):
+                    # Strip the leading '/uploads/' and join with UPLOAD_DIR
+                    relative_path = image_url[len("/uploads/") :]
+                    file_path = os.path.join(settings.UPLOAD_DIR, relative_path)
+                else:
+                    # Backward compatibility: treat it as a direct path
+                    file_path = image_url
+
+                if os.path.exists(file_path):
+                    # Serve the latest profile image file
+                    return FileResponse(
+                        file_path,
+                        media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=31536000"},  # Cache for 1 year
+                    )
 
             # Legacy fallback: try to serve from the image_storage table
             image_record = get_user_profile_image(session, current_user.id)
