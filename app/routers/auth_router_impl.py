@@ -1210,70 +1210,49 @@ async def get_profile(current_user: User = Depends(get_current_user), audit: Aud
 @router.head("/profile/image/{identifier}")
 async def get_profile_image(identifier: str, current_user: User = Depends(get_current_user)):
     """
-    Get profile image for a user (only accessible by the user themselves)
-    Accepts either user_id or image_id as the identifier
+    Get profile image for the current user.
+
+    - The path parameter is effectively the user_id.
+    - For security, a user may only access their own image.
+    - We always prefer the latest file pointed to by `users.profile_image_url`.
+      The database `image_storage` entries are used only as a legacy fallback.
     """
     try:
+        # Security: Only allow users to access their own profile image
+        if current_user.id != identifier:
+            raise HTTPException(status_code=403, detail="Access denied")
+
         with Session(engine) as session:
-            # First, try to treat identifier as image_id
-            image_record = get_image_from_database(session, identifier)
-            target_user_id = None
-            
-            if image_record:
-                # Identifier is an image_id - get the user_id from the image
-                target_user_id = image_record.user_id
-            else:
-                # Identifier is likely a user_id - use it directly
-                target_user_id = identifier
-            
-            # Security: Only allow users to access their own profile image
-            if current_user.id != target_user_id:
-                raise HTTPException(status_code=403, detail="Access denied")
-            
-            # If we found an image record directly, return it
-            if image_record:
-                from fastapi.responses import Response
-                return Response(
-                    content=image_record.image_data,
-                    media_type=image_record.content_type,
-                    headers={"Cache-Control": "public, max-age=31536000"}
-                )
-            
-            # Otherwise, try to get image from database using user_id
-            image_record = get_user_profile_image(session, target_user_id)
-            
-            if image_record:
-                # Return image from database
-                from fastapi.responses import Response
-                return Response(
-                    content=image_record.image_data,
-                    media_type=image_record.content_type,
-                    headers={"Cache-Control": "public, max-age=31536000"}
-                )
-            
-            # Fallback to legacy file system storage
+            # First, look up the user and serve from the filesystem path
             user = session.exec(
-                select(User).where(User.id == target_user_id)
+                select(User).where(User.id == current_user.id)
             ).first()
-            
-            if not user or not user.profile_image_url:
-                raise HTTPException(status_code=404, detail="Profile image not found")
-            
-            # Check if file exists
-            if not os.path.exists(user.profile_image_url):
-                raise HTTPException(status_code=404, detail="Profile image file not found")
-            
-            # Return the image file
-            return FileResponse(
-                user.profile_image_url,
-                media_type="image/jpeg",
-                headers={"Cache-Control": "public, max-age=31536000"}  # Cache for 1 year
-            )
-        
+
+            if user and user.profile_image_url and os.path.exists(user.profile_image_url):
+                # Serve the latest profile image file
+                return FileResponse(
+                    user.profile_image_url,
+                    media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=31536000"},  # Cache for 1 year
+                )
+
+            # Legacy fallback: try to serve from the image_storage table
+            image_record = get_user_profile_image(session, current_user.id)
+            if image_record:
+                from fastapi.responses import Response
+
+                return Response(
+                    content=image_record.image_data,
+                    media_type=image_record.content_type,
+                    headers={"Cache-Control": "public, max-age=31536000"},
+                )
+
+            raise HTTPException(status_code=404, detail="Profile image not found")
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error serving profile image for identifier {identifier}: {e}")
+        logger.error(f"Error serving profile image for user {identifier}: {e}")
         raise HTTPException(status_code=500, detail="Failed to serve profile image")
 
 @router.get("/images/{filename:path}")
