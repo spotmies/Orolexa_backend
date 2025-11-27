@@ -1555,10 +1555,15 @@ async def upload_profile_file(
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
 
-            # Store both URL and a simple image_id reference (re-using the URL until
-            # a dedicated image-id abstraction is introduced)
+            # Store only the URL for now. The profile_image_id column has a
+            # foreign key to image_storage.id, so we must not store the URL
+            # string there (it would violate the FK constraint).
+            #
+            # A future enhancement can insert an ImageStorage row and store its
+            # id in profile_image_id. For now we rely on file-system storage
+            # via profile_image_url and leave profile_image_id as NULL.
             user.profile_image_url = profile_image_url
-            user.profile_image_id = profile_image_url
+            user.profile_image_id = None
             user.updated_at = datetime.utcnow()
 
             session.add(user)
