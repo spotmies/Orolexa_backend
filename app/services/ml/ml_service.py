@@ -137,9 +137,19 @@ class MLService:
         if not outputs or len(outputs) == 0:
             return []
         
-        # YOLOv5 output is typically shape [1, num_detections, 85] or [1, 25200, 85]
-        # Format: [x_center, y_center, width, height, obj_conf, class1_conf, class2_conf, ...]
-        predictions = outputs[0]  # Remove batch dimension
+        predictions = outputs[0]  # Shape: [1, 8, 8400] for YOLOv8 format
+        
+        # Handle different output formats
+        if len(predictions.shape) == 3:
+            # YOLOv8 format: [1, 8, 8400] -> transpose to [8400, 8]
+            # Format: [x_center, y_center, width, height, class1_conf, class2_conf, class3_conf, class4_conf]
+            predictions = predictions[0].transpose(1, 0)  # Shape: [8400, 8]
+        elif len(predictions.shape) == 2:
+            # Already in [num_detections, features] format
+            pass
+        else:
+            logger.warning(f"Unexpected output shape: {predictions.shape}")
+            return []
         
         detections = []
         input_size = 640
@@ -149,29 +159,46 @@ class MLService:
         scale_x = orig_w / input_size
         scale_y = orig_h / input_size
         
+        num_classes = len(self.CLASS_NAMES)
+        
         for pred in predictions:
-            # Extract box coordinates (normalized)
+            if len(pred) < 4 + num_classes:
+                continue
+            
+            # Extract box coordinates (normalized [0, 1] in YOLOv8)
             x_center, y_center, width, height = pred[:4]
             
-            # Extract objectness and class scores
-            obj_conf = pred[4]
-            class_scores = pred[5:]
+            # Extract class scores (no separate objectness in YOLOv8)
+            class_scores = pred[4:4+num_classes]
+            
+            if len(class_scores) < num_classes:
+                continue
             
             # Get best class
             class_id = np.argmax(class_scores)
             class_conf = class_scores[class_id]
             
-            # Combined confidence
-            confidence = obj_conf * class_conf
+            # Confidence is just the class confidence in YOLOv8 format
+            confidence = float(class_conf)
             
             if confidence < conf_threshold:
                 continue
             
             # Convert from center format to corner format
-            x_center_abs = x_center * input_size
-            y_center_abs = y_center * input_size
-            width_abs = width * input_size
-            height_abs = height * input_size
+            # Check if coordinates are already in absolute format (large values) or normalized [0, 1]
+            # If x_center > 1, assume it's already in absolute pixel coordinates
+            if x_center > 1.0 or y_center > 1.0 or width > 1.0 or height > 1.0:
+                # Already in absolute pixel coordinates (relative to input_size)
+                x_center_abs = x_center
+                y_center_abs = y_center
+                width_abs = width
+                height_abs = height
+            else:
+                # Normalized [0, 1] format
+                x_center_abs = x_center * input_size
+                y_center_abs = y_center * input_size
+                width_abs = width * input_size
+                height_abs = height * input_size
             
             x1 = (x_center_abs - width_abs / 2) * scale_x
             y1 = (y_center_abs - height_abs / 2) * scale_y
