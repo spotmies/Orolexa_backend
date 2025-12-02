@@ -1270,37 +1270,51 @@ async def get_profile_image(identifier: str, current_user: User = Depends(get_cu
 async def get_image(filename: str):
     """
     Get any image from uploads directory (public access)
+    Supports subdirectories like: /api/auth/images/profiles/xxx.jpg or /api/auth/images/xxx.jpg
     """
     try:
-        # Construct the file path
+        # Construct the file path - filename can include subdirectories (e.g., "profiles/xxx.jpg")
         file_path = os.path.join(settings.UPLOAD_DIR, filename)
         
-        # Security: Prevent directory traversal
-        if not os.path.abspath(file_path).startswith(os.path.abspath(settings.UPLOAD_DIR)):
+        # Normalize paths to prevent directory traversal
+        upload_dir_abs = os.path.abspath(settings.UPLOAD_DIR)
+        file_path_abs = os.path.abspath(file_path)
+        
+        # Security: Prevent directory traversal - ensure file is within uploads directory
+        if not file_path_abs.startswith(upload_dir_abs):
+            logger.warning(f"Directory traversal attempt blocked: {filename}")
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Check if file exists
         if not os.path.exists(file_path):
+            logger.warning(f"Image not found: {file_path}")
             raise HTTPException(status_code=404, detail="Image not found")
         
         # Determine content type based on file extension
         content_type = "image/jpeg"  # default
-        if filename.lower().endswith('.png'):
+        filename_lower = filename.lower()
+        if filename_lower.endswith('.png'):
             content_type = "image/png"
-        elif filename.lower().endswith('.webp'):
+        elif filename_lower.endswith('.webp'):
             content_type = "image/webp"
+        elif filename_lower.endswith('.gif'):
+            content_type = "image/gif"
         
-        # Return the image file
+        # Return the image file with CORS headers for frontend access
+        from fastapi.responses import FileResponse
         return FileResponse(
             file_path,
             media_type=content_type,
-            headers={"Cache-Control": "public, max-age=31536000"}  # Cache for 1 year
+            headers={
+                "Cache-Control": "public, max-age=31536000",  # Cache for 1 year
+                "Access-Control-Allow-Origin": "*",  # Allow CORS for image access
+            }
         )
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error serving image {filename}: {e}")
+        logger.error(f"Error serving image {filename}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to serve image")
 
 @router.get("/images/profiles/{filename:path}")
