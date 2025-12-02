@@ -16,6 +16,13 @@ class RiskLevel(str, Enum):
     HIGH = "high"
     CRITICAL = "critical"
 
+class MLDetection(BaseModel):
+    """ML model detection result"""
+    class_name: str = Field(..., description="Detected class name (e.g., 'Caries', 'Ulcer')")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Detection confidence score")
+    bbox: List[int] = Field(..., description="Bounding box coordinates [x1, y1, x2, y2]")
+    class_id: int = Field(..., description="Class ID from model")
+
 class DetectedIssue(BaseModel):
     issue: str = Field(..., description="Description of the detected dental issue")
     location: str = Field(..., description="Location of the issue (e.g., 'Upper Right Molar', 'Lower Left')")
@@ -36,12 +43,16 @@ class DentalHealthReport(BaseModel):
     positive_aspects: List[PositiveAspect] = Field(default_factory=list, description="What the user is doing well")
     recommendations: List[Recommendation] = Field(default_factory=list, description="Recommendations for improvement")
     summary: str = Field(..., description="Brief summary of the dental health assessment")
+    ml_detections: Optional[List[MLDetection]] = Field(default_factory=list, description="ML model detections with bounding boxes")
+    annotated_image_url: Optional[str] = Field(None, description="URL to image with ML detections highlighted")
 
 class AnalysisResponse(BaseModel):
     id: int
     analysis: str
     image_url: str
     thumbnail_url: Optional[str] = None
+    annotated_image_url: Optional[str] = Field(None, description="URL to image with ML detections highlighted")
+    ml_detections: Optional[List[MLDetection]] = Field(default_factory=list, description="ML model detections")
     doctor_name: str
     status: str
     timestamp: str
