@@ -257,8 +257,27 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
                     annotated_bytes = ml_service.annotated_image_to_bytes(annotated_image)
                     annotated_filename = f"annotated_{uploaded.filename}"
                     annotated_url_or_path = storage.save_image(annotated_bytes, annotated_filename) or ""
-                    annotated_image_url = annotated_url_or_path if annotated_url_or_path.startswith("http") else f"{settings.BASE_URL}/{annotated_url_or_path}"
-                    logger.info(f"Saved annotated image with {len(detections)} detections")
+                    if annotated_url_or_path:
+                        # Construct full URL properly - remove leading slash to avoid double slashes
+                        if annotated_url_or_path.startswith("http"):
+                            annotated_image_url = annotated_url_or_path
+                        else:
+                            # Remove leading slash if present, then combine with BASE_URL
+                            path = annotated_url_or_path.lstrip('/')
+                            base = settings.BASE_URL.rstrip('/')
+                            annotated_image_url = f"{base}/{path}"
+                            logger.info(f"Constructed annotated image URL: {annotated_image_url} (path: {annotated_url_or_path})")
+                        # Verify file exists on disk
+                        file_path = os.path.join(settings.UPLOAD_DIR, annotated_url_or_path.replace('/uploads/', ''))
+                        if os.path.exists(file_path):
+                            logger.info(f"Verified annotated image file exists at: {file_path}")
+                        else:
+                            logger.warning(f"Annotated image file not found at: {file_path}, URL may not work")
+                    else:
+                        annotated_image_url = None
+                        logger.warning("Failed to save annotated image - storage.save_image returned None")
+                    if annotated_image_url:
+                        logger.info(f"Saved annotated image with {len(detections)} detections at {annotated_image_url}")
             except Exception as e:
                 logger.error(f"Error running ML inference: {e}", exc_info=True)
                 # Continue with Gemini analysis even if ML fails
@@ -319,12 +338,21 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
         session.commit()
         session.refresh(history_entry)
 
-        BASE_URL = settings.BASE_URL
+        BASE_URL = settings.BASE_URL.rstrip('/')
+        # Helper to construct full URL from path
+        def make_full_url(path: str) -> str:
+            if not path:
+                return None
+            if path.startswith("http"):
+                return path
+            path_clean = path.lstrip('/')
+            return f"{BASE_URL}/{path_clean}"
+        
         results.append({
             "filename": uploaded.filename,
             "saved_path": saved_url_or_path,
-            "image_url": saved_url_or_path if saved_url_or_path.startswith("http") else f"{BASE_URL}/{saved_url_or_path}",
-            "thumbnail_url": thumbnail_url_or_path if (thumbnail_url_or_path and thumbnail_url_or_path.startswith("http")) else (f"{BASE_URL}/{thumbnail_url_or_path}" if thumbnail_url_or_path else None),
+            "image_url": make_full_url(saved_url_or_path) if saved_url_or_path else None,
+            "thumbnail_url": make_full_url(thumbnail_url_or_path) if thumbnail_url_or_path else None,
             "annotated_image_url": annotated_image_url,
             "ml_detections": ml_detections,
             "analysis": analysis_text,
@@ -381,7 +409,24 @@ def _process_structured_analysis(session: Session, user_id: str, files):
                         annotated_bytes = ml_service.annotated_image_to_bytes(annotated_image)
                         annotated_filename = f"annotated_{uploaded.filename}"
                         annotated_url_or_path = storage.save_image(annotated_bytes, annotated_filename) or ""
-                        annotated_image_url = annotated_url_or_path if annotated_url_or_path.startswith("http") else f"{settings.BASE_URL}/{annotated_url_or_path}"
+                        if annotated_url_or_path:
+                            # Construct full URL properly - remove leading slash to avoid double slashes
+                            if annotated_url_or_path.startswith("http"):
+                                annotated_image_url = annotated_url_or_path
+                            else:
+                                # Remove leading slash if present, then combine with BASE_URL
+                                path = annotated_url_or_path.lstrip('/')
+                                base = settings.BASE_URL.rstrip('/')
+                                annotated_image_url = f"{base}/{path}"
+                                logger.info(f"Constructed annotated image URL: {annotated_image_url} (path: {annotated_url_or_path})")
+                            # Verify file exists on disk
+                            file_path = os.path.join(settings.UPLOAD_DIR, annotated_url_or_path.replace('/uploads/', ''))
+                            if os.path.exists(file_path):
+                                logger.info(f"Verified annotated image file exists at: {file_path}")
+                            else:
+                                logger.warning(f"Annotated image file not found at: {file_path}, URL may not work")
+                        else:
+                            logger.warning("Failed to save annotated image - storage.save_image returned None")
                         # Use annotated image for Gemini analysis
                         # Annotated image is always JPEG format, so update mime_type accordingly
                         image_data = annotated_bytes
@@ -550,18 +595,25 @@ def _process_structured_analysis(session: Session, user_id: str, files):
 
     # Include uploaded image URLs in stored report for history rendering
     try:
-        BASE_URL = settings.BASE_URL
+        BASE_URL = settings.BASE_URL.rstrip('/')
         image_urls = []
         for p in saved_paths:
             if not p:
                 continue
-            url = p if str(p).startswith("http") else f"{BASE_URL}/{p.lstrip('/')}"
+            if str(p).startswith("http"):
+                url = p
+            else:
+                # Remove leading slash to avoid double slashes
+                path_clean = str(p).lstrip('/')
+                url = f"{BASE_URL}/{path_clean}"
             image_urls.append(url)
         analysis_data["images"] = image_urls
         if annotated_image_url:
             analysis_data["annotated_image_url"] = annotated_image_url
-    except Exception:
+            logger.info(f"Added annotated_image_url to analysis_data: {annotated_image_url}")
+    except Exception as e:
         # Non-fatal; continue without images field
+        logger.error(f"Error adding image URLs to analysis_data: {e}", exc_info=True)
         pass
     
     # Add ML detections to analysis data
@@ -659,7 +711,7 @@ async def detailed_analysis(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-        prompt = "Analyze the provided dental image and provide a detailed analysis."
+    prompt = "Analyze the provided dental image and provide a detailed analysis."
     results = _process_images(session, current_user, files, prompt)
     return {"success": True, "data": {"message": "Detailed analysis completed", "results": results}}
 
