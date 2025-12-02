@@ -258,14 +258,18 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
                     annotated_filename = f"annotated_{uploaded.filename}"
                     annotated_url_or_path = storage.save_image(annotated_bytes, annotated_filename) or ""
                     if annotated_url_or_path:
-                        # Construct full URL properly - remove leading slash to avoid double slashes
+                        # Convert to API endpoint URL instead of static file
                         if annotated_url_or_path.startswith("http"):
                             annotated_image_url = annotated_url_or_path
                         else:
-                            # Remove leading slash if present, then combine with BASE_URL
-                            path = annotated_url_or_path.lstrip('/')
+                            # Convert /uploads/xxx.jpg -> /api/auth/images/xxx.jpg
                             base = settings.BASE_URL.rstrip('/')
-                            annotated_image_url = f"{base}/{path}"
+                            if annotated_url_or_path.startswith("/uploads/"):
+                                filename = annotated_url_or_path.replace("/uploads/", "")
+                                annotated_image_url = f"{base}/api/auth/images/{filename}"
+                            else:
+                                path = annotated_url_or_path.lstrip('/')
+                                annotated_image_url = f"{base}/{path}"
                             logger.info(f"Constructed annotated image URL: {annotated_image_url} (path: {annotated_url_or_path})")
                         # Verify file exists on disk
                         file_path = os.path.join(settings.UPLOAD_DIR, annotated_url_or_path.replace('/uploads/', ''))
@@ -339,12 +343,16 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
         session.refresh(history_entry)
 
         BASE_URL = settings.BASE_URL.rstrip('/')
-        # Helper to construct full URL from path
+        # Helper to construct full URL from path using API endpoint
         def make_full_url(path: str) -> str:
             if not path:
                 return None
             if path.startswith("http"):
                 return path
+            # Convert /uploads/xxx.jpg -> /api/auth/images/xxx.jpg
+            if path.startswith("/uploads/"):
+                filename = path.replace("/uploads/", "")
+                return f"{BASE_URL}/api/auth/images/{filename}"
             path_clean = path.lstrip('/')
             return f"{BASE_URL}/{path_clean}"
         
@@ -410,14 +418,18 @@ def _process_structured_analysis(session: Session, user_id: str, files):
                         annotated_filename = f"annotated_{uploaded.filename}"
                         annotated_url_or_path = storage.save_image(annotated_bytes, annotated_filename) or ""
                         if annotated_url_or_path:
-                            # Construct full URL properly - remove leading slash to avoid double slashes
+                            # Convert to API endpoint URL instead of static file
                             if annotated_url_or_path.startswith("http"):
                                 annotated_image_url = annotated_url_or_path
                             else:
-                                # Remove leading slash if present, then combine with BASE_URL
-                                path = annotated_url_or_path.lstrip('/')
+                                # Convert /uploads/xxx.jpg -> /api/auth/images/xxx.jpg
                                 base = settings.BASE_URL.rstrip('/')
-                                annotated_image_url = f"{base}/{path}"
+                                if annotated_url_or_path.startswith("/uploads/"):
+                                    filename = annotated_url_or_path.replace("/uploads/", "")
+                                    annotated_image_url = f"{base}/api/auth/images/{filename}"
+                                else:
+                                    path = annotated_url_or_path.lstrip('/')
+                                    annotated_image_url = f"{base}/{path}"
                                 logger.info(f"Constructed annotated image URL: {annotated_image_url} (path: {annotated_url_or_path})")
                             # Verify file exists on disk
                             file_path = os.path.join(settings.UPLOAD_DIR, annotated_url_or_path.replace('/uploads/', ''))
@@ -594,20 +606,47 @@ def _process_structured_analysis(session: Session, user_id: str, files):
         }
 
     # Include uploaded image URLs in stored report for history rendering
+    # Use API endpoint instead of static files for better Railway compatibility
     try:
         BASE_URL = settings.BASE_URL.rstrip('/')
+        
+        def make_image_url(path: str) -> str:
+            """Convert storage path to full API URL"""
+            if not path:
+                return None
+            if path.startswith("http"):
+                return path
+            # Convert /uploads/xxx.jpg -> /api/auth/images/xxx.jpg
+            # Convert /uploads/profiles/xxx.jpg -> /api/auth/images/profiles/xxx.jpg
+            if path.startswith("/uploads/"):
+                # Remove /uploads/ prefix and use API endpoint
+                filename = path.replace("/uploads/", "")
+                return f"{BASE_URL}/api/auth/images/{filename}"
+            else:
+                # Fallback: use path as-is
+                path_clean = path.lstrip('/')
+                return f"{BASE_URL}/{path_clean}"
+        
         image_urls = []
         for p in saved_paths:
             if not p:
                 continue
-            if str(p).startswith("http"):
-                url = p
-            else:
-                # Remove leading slash to avoid double slashes
-                path_clean = str(p).lstrip('/')
-                url = f"{BASE_URL}/{path_clean}"
-            image_urls.append(url)
+            url = make_image_url(p)
+            if url:
+                image_urls.append(url)
         analysis_data["images"] = image_urls
+        
+        # Convert annotated_image_url to use API endpoint
+        if annotated_image_url:
+            if not annotated_image_url.startswith("http"):
+                # Convert to API endpoint URL
+                if annotated_image_url.startswith("/uploads/"):
+                    filename = annotated_image_url.replace("/uploads/", "")
+                    annotated_image_url = f"{BASE_URL}/api/auth/images/{filename}"
+                else:
+                    path_clean = annotated_image_url.lstrip('/')
+                    annotated_image_url = f"{BASE_URL}/{path_clean}"
+        
         # Always set annotated_image_url (even if None) so frontend can check for it
         analysis_data["annotated_image_url"] = annotated_image_url if annotated_image_url else None
         if annotated_image_url:
