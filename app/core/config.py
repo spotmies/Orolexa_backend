@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     ADMIN_USER: str = os.environ.get("ADMIN_USER", "admin")
     ADMIN_PASS: str = os.environ.get("ADMIN_PASS", "change-me-in-prod")
     FIREBASE_TOPIC_ALL_USERS: str = os.environ.get("FIREBASE_TOPIC_ALL_USERS", "all-users")
+    
+    # ML Model Settings
+    ML_MODEL_PATH: str = os.environ.get("ML_MODEL_PATH", "models/dental_detection.onnx")
 
     # Helper methods for list envs
     def _split_csv(self, value: str) -> List[str]:
