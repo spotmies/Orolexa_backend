@@ -276,13 +276,17 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
             
             # Use annotated image for Gemini if available, otherwise use original
             image_for_gemini = image_bytes
+            mime_type_for_gemini = mime_type
             if annotated_image and ml_detections:
                 # Use annotated image for better context
                 try:
                     annotated_bytes = ml_service.annotated_image_to_bytes(annotated_image)
                     image_for_gemini = annotated_bytes
+                    # Annotated image is always JPEG format, so update mime_type accordingly
+                    mime_type_for_gemini = "image/jpeg"
                 except:
                     image_for_gemini = image_bytes
+                    mime_type_for_gemini = mime_type
             
             # Enhance prompt with ML detection info if available
             enhanced_prompt = prompt
@@ -293,7 +297,7 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
             # Proceed with dental analysis
             result = model.generate_content([
                 enhanced_prompt,
-                {"mime_type": mime_type, "data": image_for_gemini}
+                {"mime_type": mime_type_for_gemini, "data": image_for_gemini}
             ])
             analysis_text = result.text if hasattr(result, "text") else str(result)
         except Exception as e:
@@ -366,6 +370,7 @@ def _process_structured_analysis(session: Session, user_id: str, files):
         
         # Run ML inference on each image
         image_data = content
+        image_mime_type = mime_type
         if ml_service.is_available():
             try:
                 detections, annotated_image = ml_service.predict(content)
@@ -378,12 +383,14 @@ def _process_structured_analysis(session: Session, user_id: str, files):
                         annotated_url_or_path = storage.save_image(annotated_bytes, annotated_filename) or ""
                         annotated_image_url = annotated_url_or_path if annotated_url_or_path.startswith("http") else f"{settings.BASE_URL}/{annotated_url_or_path}"
                         # Use annotated image for Gemini analysis
+                        # Annotated image is always JPEG format, so update mime_type accordingly
                         image_data = annotated_bytes
+                        image_mime_type = "image/jpeg"
             except Exception as e:
                 logger.error(f"Error running ML inference on {uploaded.filename}: {e}", exc_info=True)
         
         combined_images.append({
-            "mime_type": mime_type, 
+            "mime_type": image_mime_type, 
             "data": image_data  # Use annotated image if available
         })
 
