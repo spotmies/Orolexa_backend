@@ -608,9 +608,12 @@ def _process_structured_analysis(session: Session, user_id: str, files):
                 url = f"{BASE_URL}/{path_clean}"
             image_urls.append(url)
         analysis_data["images"] = image_urls
+        # Always set annotated_image_url (even if None) so frontend can check for it
+        analysis_data["annotated_image_url"] = annotated_image_url if annotated_image_url else None
         if annotated_image_url:
-            analysis_data["annotated_image_url"] = annotated_image_url
             logger.info(f"Added annotated_image_url to analysis_data: {annotated_image_url}")
+        else:
+            logger.info("No annotated_image_url (ML model may not have detected issues or ML service unavailable)")
     except Exception as e:
         # Non-fatal; continue without images field
         logger.error(f"Error adding image URLs to analysis_data: {e}", exc_info=True)
@@ -654,6 +657,10 @@ def _process_structured_analysis(session: Session, user_id: str, files):
     if "ml_detections" in analysis_data:
         ml_detections_list = [MLDetection(**det) for det in analysis_data["ml_detections"]]
 
+    # Extract images array (already formatted as full URLs)
+    images_list = analysis_data.get("images", []) or []
+    annotated_url = analysis_data.get("annotated_image_url")  # Full HTTP URL or None
+    
     health_report = DentalHealthReport(
         health_score=float(analysis_data.get("health_score", 3.0)),
         health_status=HealthScore(analysis_data.get("health_status", "fair")),
@@ -663,7 +670,15 @@ def _process_structured_analysis(session: Session, user_id: str, files):
         recommendations=recommendations,
         summary=analysis_data.get("summary", "Dental health analysis completed"),
         ml_detections=ml_detections_list,
-        annotated_image_url=analysis_data.get("annotated_image_url")
+        annotated_image_url=annotated_url,  # Full HTTP URL string or None
+        images=images_list  # Array of full HTTP URL strings (always an array, never null)
+    )
+    
+    logger.info(
+        f"Constructed DentalHealthReport: "
+        f"annotated_image_url={'present' if annotated_url else 'None'}, "
+        f"images count={len(images_list)}, "
+        f"ml_detections count={len(ml_detections_list)}"
     )
 
     return health_report, history_entry.id
