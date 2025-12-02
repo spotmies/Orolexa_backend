@@ -15,6 +15,7 @@ from ..db.models.health.analysis import AnalysisHistory
 from ..db.models.users.user import User
 from ..core.config import settings
 from ..services.storage.storage_service import StorageService
+from ..services.ml.ml_service import MLService
 from ..db.session import engine as _engine
 from ..schemas.analysis.analysis import (
     StructuredAnalysisResponse, 
@@ -23,7 +24,8 @@ from ..schemas.analysis.analysis import (
     PositiveAspect, 
     Recommendation,
     HealthScore,
-    RiskLevel
+    RiskLevel,
+    MLDetection
 )
 
 def detect_image_type(model, image_data: bytes, mime_type: str) -> dict:
@@ -176,6 +178,16 @@ logger = logging.getLogger(__name__)
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
+# Initialize ML service (singleton)
+_ml_service = None
+
+def get_ml_service() -> MLService:
+    """Get or create ML service instance"""
+    global _ml_service
+    if _ml_service is None:
+        _ml_service = MLService()
+    return _ml_service
+
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
 
 oauth2_scheme = HTTPBearer(auto_error=False)
@@ -221,6 +233,36 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
             mime_type = "image/jpeg"
         image_bytes = content
 
+        # Run ML model inference first
+        ml_service = get_ml_service()
+        ml_detections = []
+        annotated_image_url = None
+        annotated_image = None
+        
+        if ml_service.is_available():
+            try:
+                detections, annotated_image = ml_service.predict(image_bytes)
+                ml_detections = [
+                    {
+                        "class_name": det["class_name"],
+                        "confidence": det["confidence"],
+                        "bbox": det["bbox"],
+                        "class_id": det["class_id"]
+                    }
+                    for det in detections
+                ]
+                
+                # Save annotated image
+                if detections:  # Only save if there are detections
+                    annotated_bytes = ml_service.annotated_image_to_bytes(annotated_image)
+                    annotated_filename = f"annotated_{uploaded.filename}"
+                    annotated_url_or_path = storage.save_image(annotated_bytes, annotated_filename) or ""
+                    annotated_image_url = annotated_url_or_path if annotated_url_or_path.startswith("http") else f"{settings.BASE_URL}/{annotated_url_or_path}"
+                    logger.info(f"Saved annotated image with {len(detections)} detections")
+            except Exception as e:
+                logger.error(f"Error running ML inference: {e}", exc_info=True)
+                # Continue with Gemini analysis even if ML fails
+
         try:
             model = get_gemini_model()
             
@@ -232,10 +274,26 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
                 logger.info(f"Non-dental image detected: {image_detection.get('description', 'Unknown')}")
                 return create_non_dental_response(image_detection)
             
+            # Use annotated image for Gemini if available, otherwise use original
+            image_for_gemini = image_bytes
+            if annotated_image and ml_detections:
+                # Use annotated image for better context
+                try:
+                    annotated_bytes = ml_service.annotated_image_to_bytes(annotated_image)
+                    image_for_gemini = annotated_bytes
+                except:
+                    image_for_gemini = image_bytes
+            
+            # Enhance prompt with ML detection info if available
+            enhanced_prompt = prompt
+            if ml_detections:
+                detection_summary = ", ".join([f"{det['class_name']} (confidence: {det['confidence']:.2f})" for det in ml_detections])
+                enhanced_prompt = f"{prompt}\n\nNote: ML model detected the following dental issues: {detection_summary}. Please provide detailed analysis considering these detections."
+            
             # Proceed with dental analysis
             result = model.generate_content([
-                prompt,
-                {"mime_type": mime_type, "data": image_bytes}
+                enhanced_prompt,
+                {"mime_type": mime_type, "data": image_for_gemini}
             ])
             analysis_text = result.text if hasattr(result, "text") else str(result)
         except Exception as e:
@@ -263,6 +321,8 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
             "saved_path": saved_url_or_path,
             "image_url": saved_url_or_path if saved_url_or_path.startswith("http") else f"{BASE_URL}/{saved_url_or_path}",
             "thumbnail_url": thumbnail_url_or_path if (thumbnail_url_or_path and thumbnail_url_or_path.startswith("http")) else (f"{BASE_URL}/{thumbnail_url_or_path}" if thumbnail_url_or_path else None),
+            "annotated_image_url": annotated_image_url,
+            "ml_detections": ml_detections,
             "analysis": analysis_text,
             "history_id": history_entry.id,
             "doctor_name": "Dr. AI Assistant",
@@ -275,10 +335,13 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
 def _process_structured_analysis(session: Session, user_id: str, files):
     """Process images and generate structured dental health report"""
     storage = StorageService()
+    ml_service = get_ml_service()
     
     # Combine all images for comprehensive analysis
     combined_images = []
     saved_paths = []
+    all_ml_detections = []
+    annotated_image_url = None
     
     for uploaded in files:
         if uploaded.content_type not in settings.ALLOWED_IMAGE_TYPES:
@@ -301,14 +364,41 @@ def _process_structured_analysis(session: Session, user_id: str, files):
         if not mime_type:
             mime_type = "image/jpeg"
         
+        # Run ML inference on each image
+        image_data = content
+        if ml_service.is_available():
+            try:
+                detections, annotated_image = ml_service.predict(content)
+                if detections:
+                    all_ml_detections.extend(detections)
+                    # Use annotated image for first image with detections
+                    if not annotated_image_url and detections:
+                        annotated_bytes = ml_service.annotated_image_to_bytes(annotated_image)
+                        annotated_filename = f"annotated_{uploaded.filename}"
+                        annotated_url_or_path = storage.save_image(annotated_bytes, annotated_filename) or ""
+                        annotated_image_url = annotated_url_or_path if annotated_url_or_path.startswith("http") else f"{settings.BASE_URL}/{annotated_url_or_path}"
+                        # Use annotated image for Gemini analysis
+                        image_data = annotated_bytes
+            except Exception as e:
+                logger.error(f"Error running ML inference on {uploaded.filename}: {e}", exc_info=True)
+        
         combined_images.append({
             "mime_type": mime_type, 
-            "data": content
+            "data": image_data  # Use annotated image if available
         })
 
     # Create comprehensive dental analysis prompt
-    prompt = """
+    ml_context = ""
+    if all_ml_detections:
+        detection_summary = ", ".join([
+            f"{det['class_name']} (confidence: {det['confidence']:.2f})" 
+            for det in all_ml_detections
+        ])
+        ml_context = f"\n\nML Model Detection Context: The ML model has detected the following dental issues in the images: {detection_summary}. Please consider these detections in your analysis."
+    
+    prompt = f"""
     You are a professional dental AI assistant. Analyze the provided dental images and provide a comprehensive dental health assessment in the exact JSON format specified below.
+    {ml_context}
 
     **IMPORTANT: Respond ONLY with valid JSON in the exact format below. Do not include any other text or explanations.**
 
@@ -458,9 +548,23 @@ def _process_structured_analysis(session: Session, user_id: str, files):
             url = p if str(p).startswith("http") else f"{BASE_URL}/{p.lstrip('/')}"
             image_urls.append(url)
         analysis_data["images"] = image_urls
+        if annotated_image_url:
+            analysis_data["annotated_image_url"] = annotated_image_url
     except Exception:
         # Non-fatal; continue without images field
         pass
+    
+    # Add ML detections to analysis data
+    if all_ml_detections:
+        analysis_data["ml_detections"] = [
+            {
+                "class_name": det["class_name"],
+                "confidence": det["confidence"],
+                "bbox": det["bbox"],
+                "class_id": det["class_id"]
+            }
+            for det in all_ml_detections
+        ]
 
     # Create thumbnail for the first image
     thumbnail_url_or_path = storage.create_thumbnail(combined_images[0]["data"], files[0].filename) if combined_images else None
@@ -482,6 +586,11 @@ def _process_structured_analysis(session: Session, user_id: str, files):
     detected_issues = [DetectedIssue(**issue) for issue in analysis_data.get("detected_issues", [])]
     positive_aspects = [PositiveAspect(**aspect) for aspect in analysis_data.get("positive_aspects", [])]
     recommendations = [Recommendation(**rec) for rec in analysis_data.get("recommendations", [])]
+    
+    # Convert ML detections
+    ml_detections_list = []
+    if "ml_detections" in analysis_data:
+        ml_detections_list = [MLDetection(**det) for det in analysis_data["ml_detections"]]
 
     health_report = DentalHealthReport(
         health_score=float(analysis_data.get("health_score", 3.0)),
@@ -490,7 +599,9 @@ def _process_structured_analysis(session: Session, user_id: str, files):
         detected_issues=detected_issues,
         positive_aspects=positive_aspects,
         recommendations=recommendations,
-        summary=analysis_data.get("summary", "Dental health analysis completed")
+        summary=analysis_data.get("summary", "Dental health analysis completed"),
+        ml_detections=ml_detections_list,
+        annotated_image_url=analysis_data.get("annotated_image_url")
     )
 
     return health_report, history_entry.id

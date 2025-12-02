@@ -1,5 +1,9 @@
 .env
 
+# Node.js (not needed for Python backend)
+node_modules/
+package-lock.json
+
 # Firmware binaries (keep directory structure)
 firmware/*.bin
 firmware/*.hex
