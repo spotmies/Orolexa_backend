@@ -45,6 +45,10 @@ class DentalHealthReport(BaseModel):
     summary: str = Field(..., description="Brief summary of the dental health assessment")
     ml_detections: Optional[List[MLDetection]] = Field(default_factory=list, description="ML model detections with bounding boxes")
     annotated_image_url: Optional[str] = Field(None, description="URL to image with ML detections highlighted")
+    images: Optional[List[str]] = Field(
+        default_factory=list,
+        description="List of URLs for the images that were analyzed"
+    )
 
 class AnalysisResponse(BaseModel):
     id: int
