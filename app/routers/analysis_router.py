@@ -343,11 +343,15 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
         session.refresh(history_entry)
 
         BASE_URL = settings.BASE_URL.rstrip('/')
-        # Helper to construct full URL from path using API endpoint
+        # Helper to construct full URL from path using API endpoint, filtering file:// URIs
         def make_full_url(path: str) -> str:
             if not path:
                 return None
-            if path.startswith("http"):
+            # Reject file:// URIs - these are local device paths, not server URLs
+            if isinstance(path, str) and path.startswith("file://"):
+                logger.warning(f"Ignoring file:// URI in image path: {path}")
+                return None
+            if path.startswith("http://") or path.startswith("https://"):
                 return path
             # Convert /uploads/xxx.jpg -> /api/auth/images/xxx.jpg
             if path.startswith("/uploads/"):
@@ -356,12 +360,25 @@ def _process_images(session: Session, user_id: str, files, prompt: str):
             path_clean = path.lstrip('/')
             return f"{BASE_URL}/{path_clean}"
         
+        # Ensure annotated_image_url is valid HTTP URL or None
+        final_annotated_url = None
+        if annotated_image_url:
+            if annotated_image_url.startswith("file://"):
+                logger.warning(f"Filtering out file:// URI from annotated_image_url: {annotated_image_url}")
+            elif annotated_image_url.startswith("http://") or annotated_image_url.startswith("https://"):
+                final_annotated_url = annotated_image_url
+            else:
+                # Try to convert it
+                converted = make_full_url(annotated_image_url)
+                if converted and (converted.startswith("http://") or converted.startswith("https://")):
+                    final_annotated_url = converted
+        
         results.append({
             "filename": uploaded.filename,
             "saved_path": saved_url_or_path,
             "image_url": make_full_url(saved_url_or_path) if saved_url_or_path else None,
             "thumbnail_url": make_full_url(thumbnail_url_or_path) if thumbnail_url_or_path else None,
-            "annotated_image_url": annotated_image_url,
+            "annotated_image_url": final_annotated_url,
             "ml_detections": ml_detections,
             "analysis": analysis_text,
             "history_id": history_entry.id,
@@ -611,10 +628,15 @@ def _process_structured_analysis(session: Session, user_id: str, files):
         BASE_URL = settings.BASE_URL.rstrip('/')
         
         def make_image_url(path: str) -> str:
-            """Convert storage path to full API URL"""
+            """Convert storage path to full API URL, filtering out file:// URIs"""
             if not path:
                 return None
-            if path.startswith("http"):
+            # Reject file:// URIs - these are local device paths, not server URLs
+            if isinstance(path, str) and path.startswith("file://"):
+                logger.warning(f"Ignoring file:// URI in image path: {path}")
+                return None
+            # Already a full HTTP URL
+            if path.startswith("http://") or path.startswith("https://"):
                 return path
             # Convert /uploads/xxx.jpg -> /api/auth/images/xxx.jpg
             # Convert /uploads/profiles/xxx.jpg -> /api/auth/images/profiles/xxx.jpg
@@ -623,7 +645,9 @@ def _process_structured_analysis(session: Session, user_id: str, files):
                 filename = path.replace("/uploads/", "")
                 return f"{BASE_URL}/api/auth/images/{filename}"
             else:
-                # Fallback: use path as-is
+                # Fallback: use path as-is (but log warning for unexpected formats)
+                if not path.startswith("/"):
+                    logger.warning(f"Unexpected image path format: {path}")
                 path_clean = path.lstrip('/')
                 return f"{BASE_URL}/{path_clean}"
         
@@ -631,14 +655,24 @@ def _process_structured_analysis(session: Session, user_id: str, files):
         for p in saved_paths:
             if not p:
                 continue
+            # Filter out file:// URIs and ensure we only return HTTP URLs
+            if isinstance(p, str) and p.startswith("file://"):
+                logger.warning(f"Skipping file:// URI from saved_paths: {p}")
+                continue
             url = make_image_url(p)
-            if url:
+            if url and (url.startswith("http://") or url.startswith("https://")):
                 image_urls.append(url)
+            else:
+                logger.warning(f"Invalid image URL generated: {url} from path: {p}")
         analysis_data["images"] = image_urls
         
-        # Convert annotated_image_url to use API endpoint
+        # Convert annotated_image_url to use API endpoint and filter out file:// URIs
         if annotated_image_url:
-            if not annotated_image_url.startswith("http"):
+            # Reject file:// URIs - these are local device paths, not server URLs
+            if annotated_image_url.startswith("file://"):
+                logger.warning(f"Ignoring file:// URI in annotated_image_url: {annotated_image_url}")
+                annotated_image_url = None
+            elif not annotated_image_url.startswith("http"):
                 # Convert to API endpoint URL
                 if annotated_image_url.startswith("/uploads/"):
                     filename = annotated_image_url.replace("/uploads/", "")
@@ -648,7 +682,11 @@ def _process_structured_analysis(session: Session, user_id: str, files):
                     annotated_image_url = f"{BASE_URL}/{path_clean}"
         
         # Always set annotated_image_url (even if None) so frontend can check for it
-        analysis_data["annotated_image_url"] = annotated_image_url if annotated_image_url else None
+        # Ensure it's a valid HTTP URL or None
+        if annotated_image_url and not (annotated_image_url.startswith("http://") or annotated_image_url.startswith("https://")):
+            logger.warning(f"Invalid annotated_image_url format: {annotated_image_url}, setting to None")
+            annotated_image_url = None
+        analysis_data["annotated_image_url"] = annotated_image_url
         if annotated_image_url:
             logger.info(f"Added annotated_image_url to analysis_data: {annotated_image_url}")
         else:
@@ -697,8 +735,30 @@ def _process_structured_analysis(session: Session, user_id: str, files):
         ml_detections_list = [MLDetection(**det) for det in analysis_data["ml_detections"]]
 
     # Extract images array (already formatted as full URLs)
-    images_list = analysis_data.get("images", []) or []
+    # Filter out any file:// URIs or invalid URLs
+    images_list_raw = analysis_data.get("images", []) or []
+    images_list = []
+    for img_url in images_list_raw:
+        if isinstance(img_url, str):
+            # Reject file:// URIs
+            if img_url.startswith("file://"):
+                logger.warning(f"Filtering out file:// URI from images array: {img_url}")
+                continue
+            # Only accept HTTP/HTTPS URLs
+            if img_url.startswith("http://") or img_url.startswith("https://"):
+                images_list.append(img_url)
+            else:
+                logger.warning(f"Filtering out invalid image URL: {img_url}")
+    
     annotated_url = analysis_data.get("annotated_image_url")  # Full HTTP URL or None
+    # Final validation: ensure annotated_url is valid HTTP URL or None
+    if annotated_url:
+        if annotated_url.startswith("file://"):
+            logger.warning(f"Filtering out file:// URI from annotated_image_url: {annotated_url}")
+            annotated_url = None
+        elif not (annotated_url.startswith("http://") or annotated_url.startswith("https://")):
+            logger.warning(f"Invalid annotated_image_url format: {annotated_url}, setting to None")
+            annotated_url = None
     
     health_report = DentalHealthReport(
         health_score=float(analysis_data.get("health_score", 3.0)),
@@ -709,8 +769,8 @@ def _process_structured_analysis(session: Session, user_id: str, files):
         recommendations=recommendations,
         summary=analysis_data.get("summary", "Dental health analysis completed"),
         ml_detections=ml_detections_list,
-        annotated_image_url=annotated_url,  # Full HTTP URL string or None
-        images=images_list  # Array of full HTTP URL strings (always an array, never null)
+        annotated_image_url=annotated_url,  # Full HTTP URL string or None (never file://)
+        images=images_list  # Array of full HTTP URL strings (never file:// URIs)
     )
     
     logger.info(
@@ -856,12 +916,39 @@ def get_history(
             except Exception:
                 pass
 
-            image_url = r.image_url if (r.image_url or "").startswith("http") else (f"{BASE_URL}/{r.image_url}" if r.image_url else None)
+            # Convert image_url to full HTTP URL, filtering out file:// URIs
+            image_url = None
+            if r.image_url:
+                if r.image_url.startswith("file://"):
+                    logger.warning(f"Filtering out file:// URI from history image_url: {r.image_url}")
+                elif r.image_url.startswith("http://") or r.image_url.startswith("https://"):
+                    image_url = r.image_url
+                else:
+                    # Convert to API endpoint URL
+                    base = BASE_URL.rstrip('/')
+                    if r.image_url.startswith("/uploads/"):
+                        filename = r.image_url.replace("/uploads/", "")
+                        image_url = f"{base}/api/auth/images/{filename}"
+                    else:
+                        image_url = f"{base}/{r.image_url.lstrip('/')}"
+            
+            # Filter images array to only include HTTP/HTTPS URLs
+            filtered_images = []
+            for img in images:
+                if isinstance(img, str):
+                    if img.startswith("file://"):
+                        logger.warning(f"Filtering out file:// URI from history images: {img}")
+                        continue
+                    if img.startswith("http://") or img.startswith("https://"):
+                        filtered_images.append(img)
+            
+            # Use filtered images or fallback to image_url
+            final_images = filtered_images if filtered_images else ([image_url] if image_url and (image_url.startswith("http://") or image_url.startswith("https://")) else [])
 
             history_data.append({
                 "date": r.created_at.strftime("%Y-%m-%d %H:%M:%S"),
                 "detected_issues": detected_issues,
-                "images": images if images else ([image_url] if image_url else []),
+                "images": final_images,
             })
         return {"success": True, "data": history_data}
     except HTTPException:
