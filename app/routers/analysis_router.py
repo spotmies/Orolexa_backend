@@ -403,7 +403,10 @@ def _process_structured_analysis(session: Session, user_id: str, files):
         ])
         ml_context = f"\n\nML Model Detection Context: The ML model has detected the following dental issues in the images: {detection_summary}. Please consider these detections in your analysis."
     
-    prompt = f"""
+    # NOTE: this is a normal triple-quoted string (not an f-string) with literal JSON braces.
+    # We inject the ML context separately above to avoid Python trying to interpret the JSON
+    # template as a format string (which caused "Invalid format specifier" errors).
+    prompt = """
     You are a professional dental AI assistant. Analyze the provided dental images and provide a comprehensive dental health assessment in the exact JSON format specified below.
     {ml_context}
 
