@@ -48,7 +48,12 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
     GEMINI_FALLBACK_MODELS: List[str] = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest"]
     
-    # Twilio Settings
+    # 2Factor.in Settings (for OTP/SMS)
+    TWOFACTOR_API_KEY: str = os.environ.get("TWOFACTOR_API_KEY", "")
+    PHONE_SMS: str = os.environ.get("PHONE_SMS", "")  # Alternative env var name for 2factor.in API key
+    SMS_TEMPLATE_NAME: Optional[str] = os.environ.get("SMS_TEMPLATE_NAME", None)  # Optional DLT approved template name
+    
+    # Twilio Settings (deprecated - kept for backward compatibility)
     TWILIO_ACCOUNT_SID: str = os.environ.get("TWILIO_ACCOUNT_SID", "")
     TWILIO_AUTH_TOKEN: str = os.environ.get("TWILIO_AUTH_TOKEN", "")
     TWILIO_VERIFY_SERVICE_SID: str = os.environ.get("TWILIO_VERIFY_SERVICE_SID", "")

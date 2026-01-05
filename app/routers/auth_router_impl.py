@@ -20,7 +20,7 @@ from ..schemas import (
     UploadImageRequest, UploadImageResponse, DeleteImageResponse, DeleteAccountRequest, DeleteAccountResponse
 )
 from ..services.auth import create_jwt_token, create_refresh_token, decode_jwt_token
-from app.services.auth.firebase_service import verify_firebase_id_token, extract_user_info_from_claims, is_test_phone_number
+from ..services.auth.otp_service import OTPService
 import os
 import uuid
 import shutil
@@ -49,7 +49,7 @@ RATE_LIMIT_WINDOW_HOURS = 1
 MAX_REQUESTS_PER_WINDOW = 3
 SESSION_EXPIRY_DAYS = 30
 
-# Twilio removed; Firebase verification is used instead
+# Authentication now uses 2FA with Twilio OTP (SMS)
 
 # In-memory cache for rate limiting (use Redis in production)
 _rate_limit_cache: Dict[str, Dict[str, Any]] = {}
@@ -655,47 +655,13 @@ def cleanup_expired_otps():
     except Exception as e:
         logger.error(f"Error cleaning up expired OTPs: {e}")
 
-def send_twilio_otp(phone: str) -> str:
-    """Send OTP via Twilio Verify and return verification SID"""
-    try:
-        if not settings.TWILIO_VERIFY_SERVICE_SID:
-            raise Exception("Twilio Verify Service SID not configured")
-        
-        verification = client.verify.services(settings.TWILIO_VERIFY_SERVICE_SID).verifications.create(
-            to=phone, 
-            channel="sms"
-        )
-        
-        logger.info(f"Twilio verification sent to {phone}, SID: {verification.sid}")
-        return verification.sid
-        
-    except Exception as e:
-        logger.error(f"Twilio error: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to send OTP: {str(e)}")
-
-def verify_twilio_otp(phone: str, otp: str) -> bool:
-    """Verify OTP using Twilio Verify"""
-    try:
-        if not settings.TWILIO_VERIFY_SERVICE_SID:
-            raise Exception("Twilio Verify Service SID not configured")
-        
-        verification_check = client.verify.services(settings.TWILIO_VERIFY_SERVICE_SID).verification_checks.create(
-            to=phone,
-            code=otp
-        )
-        
-        logger.info(f"Twilio verification check for {phone}: {verification_check.status}")
-        return verification_check.status == "approved"
-        
-    except Exception as e:
-        logger.error(f"Twilio verification error: {e}")
-        return False
+# Twilio OTP functions removed - now handled by OTPService class
 
 # ------------------------
 # Minimal DI for services
 # ------------------------
 from ..services.users.user_service import UserService as SqlUserRepository  # alias for compatibility
-from ..services.auth.otp_service import OTPService as TwilioOTPProvider  # alias for compatibility
+from ..services.auth.otp_service import OTPService
 from ..services.auth.auth_service import AuthService
 from ..services.users.user_service import UserService as SqlSessionRepository  # placeholder session repo
 from ..db.session import engine as _engine
@@ -796,117 +762,128 @@ async def logout(current_user: User = Depends(get_current_user)):
 @router.post("/login", response_model=LoginResponse)
 async def login(payload: LoginRequest, request: Request, auth_service: AuthService = Depends(get_auth_service), audit: AuditLogger = Depends(get_audit_logger), limiter: RateLimiter = Depends(get_rate_limiter)):
     """
-    Production-ready login API with enhanced security and monitoring
+    Production-ready login API with 2FA (OTP via SMS)
     """
     request_id = str(uuid.uuid4())
     client_info = get_client_info(request)
+    phone = payload.phone
     
     try:
-        # Check if user exists
-        with Session(engine) as session:
-            user = session.exec(
-                select(User).where(User.phone == payload.phone)
-            ).first()
-            
-            # For testing purposes, allow OTP sending even if user doesn't exist
-            # In production, you might want to keep the user check
-            if not user:
-                logger.info(f"User not found for phone {payload.phone}, but allowing OTP send for testing")
-                # Create a temporary user for testing
-                user = User(
-                    id=str(uuid.uuid4()),
-                    name="Test User",
-                    phone=payload.phone,
-                    is_verified=False,
-                    is_active=True
-                )
-                session.add(user)
-                session.commit()
-                session.refresh(user)
+        logger.info(f"Login request received for phone: {phone}")
         
-        # Enhanced rate limiting - keyed by Firebase token hash to avoid phone requirement
-        token_key = hashlib.sha256(payload.firebase_id_token.encode()).hexdigest()
-        if not limiter.allow_request(f"login:{token_key}", MAX_REQUESTS_PER_WINDOW, RATE_LIMIT_WINDOW_HOURS * 3600):
-            audit.log('rate_limit_exceeded', payload.phone, request_id=request_id, 
-                      ip_address=client_info['ip_address'], success=False)
+        # Rate limiting
+        try:
+            if not limiter.allow_request(f"login:{phone}", MAX_REQUESTS_PER_WINDOW, RATE_LIMIT_WINDOW_HOURS * 3600):
+                try:
+                    audit.log('rate_limit_exceeded', phone, request_id=request_id, 
+                              ip_address=client_info.get('ip_address'), success=False)
+                except Exception as audit_err:
+                    logger.warning(f"Audit log failed: {audit_err}")
+                return LoginResponse(
+                    success=False,
+                    message="Too many OTP requests. Please try again later.",
+                    data={"error": "RATE_LIMIT_EXCEEDED"}
+                )
+        except Exception as rate_limit_err:
+            logger.error(f"Rate limiting error: {rate_limit_err}", exc_info=True)
+            # Continue if rate limiting fails
+
+        # Check if user exists
+        user = None
+        try:
+            with Session(engine) as session:
+                user = session.exec(
+                    select(User).where(User.phone == phone)
+                ).first()
+        except Exception as db_err:
+            logger.error(f"Database error checking user: {db_err}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Database error while checking user")
+        
+        if not user:
+            try:
+                audit.log('login_user_not_found', phone, request_id=request_id, 
+                          ip_address=client_info.get('ip_address'), success=False)
+            except Exception as audit_err:
+                logger.warning(f"Audit log failed: {audit_err}")
             return LoginResponse(
                 success=False,
-                message="Too many OTP requests. Please try again later.",
-                data={"error": "RATE_LIMIT_EXCEEDED"}
+                message="User not found. Please register first.",
+                data={"error": "USER_NOT_FOUND"}
             )
 
-        # Verify Firebase ID token and authenticate immediately (no OTP flow)
-        claims = verify_firebase_id_token(payload.firebase_id_token)
-        if not claims:
-            raise HTTPException(status_code=401, detail="Invalid Firebase token")
+        # Send OTP via 2factor.in
+        try:
+            otp_service = OTPService()
+            otp_code_sent = otp_service.send_otp(phone)
+            
+            if not otp_code_sent:
+                logger.error(f"Failed to send OTP for phone: {phone}")
+                try:
+                    audit.log('otp_send_failed', phone, request_id=request_id, 
+                              ip_address=client_info.get('ip_address'), success=False)
+                except Exception as audit_err:
+                    logger.warning(f"Audit log failed: {audit_err}")
+                raise HTTPException(status_code=500, detail="Failed to send OTP. Please check your 2Factor API configuration.")
+        except HTTPException:
+            raise
+        except Exception as otp_err:
+            logger.error(f"OTP service error: {otp_err}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Error sending OTP: {str(otp_err)}")
 
-        info = extract_user_info_from_claims(claims)
-        firebase_phone = info.get("phone") or payload.phone
-
-        if not firebase_phone:
-            raise HTTPException(status_code=400, detail="Phone number not available from token or request")
-
-        # Check if this is a test phone number from Firebase
-        is_test_number = is_test_phone_number(firebase_phone)
-        if is_test_number:
-            logger.info(f"Test phone number detected: {firebase_phone} - Authorization allowed")
-
-        # Ensure user exists
-        with Session(engine) as session:
-            user = session.exec(select(User).where(User.phone == firebase_phone)).first()
-            if not user:
-                user = User(
-                    id=str(uuid.uuid4()),
-                    name=info.get("name") or "User",
-                    phone=firebase_phone,
-                    country_code=extract_country_code(firebase_phone),
-                    is_verified=True,
-                    is_active=True
+        # Store OTP code in database for verification
+        try:
+            with Session(engine) as session:
+                otp_record = OTPCode(
+                    phone=phone,
+                    otp=otp_code_sent,  # Store the OTP code for verification
+                    flow="login",
+                    session_id=None,  # Not used with new SMS endpoint
+                    expires_at=datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
                 )
-                session.add(user)
+                session.add(otp_record)
                 session.commit()
-                session.refresh(user)
-                if is_test_number:
-                    logger.info(f"Created user for test phone number: {firebase_phone}")
+                logger.info(f"OTP stored successfully for phone: {phone}")
+        except Exception as db_err:
+            logger.error(f"Database error storing OTP: {db_err}", exc_info=True)
+            logger.error(f"Failed to store OTP - phone: {phone}")
+            # Include more details in error message for debugging
+            error_detail = str(db_err)
+            if "UNIQUE constraint" in error_detail or "unique constraint" in error_detail.lower():
+                error_detail = "Duplicate OTP session. Please try again."
+            raise HTTPException(status_code=500, detail=f"Error storing OTP: {error_detail}")
 
-        # Issue JWTs and session
-        access_token = create_jwt_token({"sub": user.id})
-        refresh_token = create_refresh_token({"sub": user.id})
-
-        with Session(engine) as session:
-            user_session = UserSession(
-                user_id=user.id,
-                token=access_token,
-                refresh_token=refresh_token,
-                expires_at=datetime.utcnow() + timedelta(days=30)
-            )
-            session.add(user_session)
-            session.commit()
-
-        audit.log('firebase_login', firebase_phone, user.id, request_id, client_info['ip_address'], True)
+        try:
+            audit.log('login_otp_sent', phone, user.id if user else None, request_id=request_id, 
+                      ip_address=client_info.get('ip_address'), success=True, details={'otp_sent': True})
+        except Exception as audit_err:
+            logger.warning(f"Audit log failed: {audit_err}")
 
         return LoginResponse(
             success=True,
-            message="Login successful",
+            message="OTP sent successfully. Please verify to complete login.",
             data={
-                "phone": firebase_phone,
+                "phone": phone,
                 "request_id": request_id,
+                "otp_expires_in": OTP_EXPIRY_MINUTES * 60,
             }
         )
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Login error for {payload.phone}: {e}")
-        audit.log('login_error', payload.phone, request_id=request_id, 
-                  ip_address=client_info['ip_address'], success=False, 
-                  details={'error': str(e)})
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Login error for {phone}: {e}", exc_info=True)
+        try:
+            audit.log('login_error', phone, request_id=request_id, 
+                      ip_address=client_info.get('ip_address'), success=False, 
+                      details={'error': str(e)})
+        except Exception as audit_err:
+            logger.warning(f"Audit log failed: {audit_err}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # Backward-compatible alias for older clients expecting /api/auth/login/send-otp
 @router.post("/login/send-otp", response_model=LoginResponse)
-async def login_send_otp_alias(payload: LoginRequest):
-    return await login(payload)
+async def login_send_otp_alias(payload: LoginRequest, request: Request, auth_service: AuthService = Depends(get_auth_service), audit: AuditLogger = Depends(get_audit_logger), limiter: RateLimiter = Depends(get_rate_limiter)):
+    return await login(payload, request, auth_service, audit, limiter)
 
 @router.post("/register", response_model=RegisterResponse, status_code=201)
 async def register(
@@ -966,16 +943,32 @@ async def register(
                 logger.error(f"Failed to save profile image: {e}")
                 raise HTTPException(status_code=500, detail="Failed to save image")
         
-        # Send OTP via Twilio
+        # Send OTP via 2factor.in
         try:
-            otp_service = TwilioOTPProvider()
-            verification_sid = otp_service.send_otp(phone)
-            if not verification_sid:
-                raise Exception("Failed to send OTP via Twilio")
+            otp_service = OTPService()
+            otp_code_sent = otp_service.send_otp(phone)
+            if not otp_code_sent:
+                raise Exception("Failed to send OTP via 2factor.in")
+            
+            # Store OTP code in database for verification
+            with Session(engine) as session:
+                otp_record = OTPCode(
+                    phone=phone,
+                    otp=otp_code_sent,  # Store the OTP code for verification
+                    flow="register",
+                    session_id=None,  # Not used with new SMS endpoint
+                    expires_at=datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
+                )
+                session.add(otp_record)
+                session.commit()
+                logger.info(f"OTP stored successfully for phone: {phone}")
         except Exception as e:
-            logger.error(f"Failed to send OTP: {e}")
-            audit.log('otp_send_failed', phone, request_id=request_id, 
-                      ip_address=client_info.get('ip_address'), success=False, details={'error': str(e)})
+            logger.error(f"Failed to send OTP: {e}", exc_info=True)
+            try:
+                audit.log('otp_send_failed', phone, request_id=request_id, 
+                          ip_address=client_info.get('ip_address'), success=False, details={'error': str(e)})
+            except Exception as audit_err:
+                logger.warning(f"Audit log failed: {audit_err}")
             raise HTTPException(status_code=500, detail="Failed to send OTP")
         
         # Save user data to database
@@ -995,8 +988,11 @@ async def register(
             session.commit()
         
         # Audit logging for successful registration
-        audit.log('register_otp_sent', phone, user_id, request_id, 
-                  client_info.get('ip_address'), True, {'verification_sid': verification_sid})
+        try:
+            audit.log('register_otp_sent', phone, user_id, request_id=request_id, 
+                      ip_address=client_info.get('ip_address'), success=True, details={'otp_sent': True})
+        except Exception as audit_err:
+            logger.warning(f"Audit log failed: {audit_err}")
         
         return RegisterResponse(
             success=True,
@@ -1020,86 +1016,185 @@ async def register(
 
 # Backward-compatible alias for older clients expecting /api/auth/register/send-otp
 @router.post("/register/send-otp", response_model=RegisterResponse, status_code=201)
-async def register_send_otp_alias(payload: RegisterRequest):
-    return await register(payload)
+async def register_send_otp_alias(
+    name: str = Form(...),
+    phone: str = Form(...),
+    age: Optional[int] = Form(None),
+    date_of_birth: Optional[str] = Form(None),
+    profile_image: Optional[UploadFile] = File(None),
+    request: Request = None,
+    audit: AuditLogger = Depends(get_audit_logger),
+    limiter: RateLimiter = Depends(get_rate_limiter),
+):
+    return await register(name, phone, age, date_of_birth, profile_image, request, audit, limiter)
 
-@router.post("/firebase/verify", response_model=VerifyOTPResponse)
-async def firebase_verify(payload: VerifyOTPRequest, response: Response, auth_service: AuthService = Depends(get_auth_service), audit: AuditLogger = Depends(get_audit_logger)):
+@router.post("/verify-otp", response_model=VerifyOTPResponse)
+async def verify_otp(payload: VerifyOTPRequest, response: Response, request: Request, auth_service: AuthService = Depends(get_auth_service), audit: AuditLogger = Depends(get_audit_logger)):
     """
-    Verify Firebase ID token and issue backend JWTs
+    Verify OTP code and issue backend JWTs (2FA authentication)
     """
+    request_id = str(uuid.uuid4())
+    client_info = get_client_info(request)
+    
     try:
-        # Expect firebase_id_token in payload.extra
-        firebase_id_token = getattr(payload, 'firebase_id_token', None) or payload.__dict__.get('firebase_id_token')
-        if not firebase_id_token:
-            return VerifyOTPResponse(success=False, message="Missing firebase_id_token", data={"error": "MISSING_TOKEN"})
+        phone = payload.get_phone()
+        otp_code = payload.get_otp()
+        flow = payload.get_flow()
+        
+        # Validate inputs
+        if not phone or phone.strip() == "":
+            logger.warning(f"Verify OTP: Missing phone number in request")
+            return VerifyOTPResponse(success=False, message="Phone number is required", data={"error": "MISSING_PHONE"})
+        
+        if not otp_code or otp_code.strip() == "":
+            logger.warning(f"Verify OTP: Missing OTP code in request for phone {phone}")
+            return VerifyOTPResponse(success=False, message="OTP code is required", data={"error": "MISSING_OTP"})
+        
+        # Validate OTP format
+        if not otp_code.isdigit() or len(otp_code) != 6:
+            logger.warning(f"Verify OTP: Invalid OTP format for phone {phone}")
+            return VerifyOTPResponse(success=False, message="OTP must be 6 digits", data={"error": "INVALID_OTP_FORMAT"})
 
-        claims = verify_firebase_id_token(firebase_id_token)
-        if not claims:
-            return VerifyOTPResponse(success=False, message="Invalid Firebase token", data={"error": "INVALID_TOKEN"})
+        # Get stored OTP from database (stored when OTP was sent)
+        stored_otp = None
+        otp_record = None
+        try:
+            with Session(engine) as session:
+                # Find the most recent unused OTP code for this phone
+                otp_record = session.exec(
+                    select(OTPCode).where(
+                        OTPCode.phone == phone,
+                        OTPCode.is_used == False,
+                        OTPCode.expires_at > datetime.utcnow()
+                    ).order_by(OTPCode.created_at.desc())
+                ).first()
+                
+                if otp_record:
+                    stored_otp = otp_record.otp
+                    logger.info(f"Found OTP record for phone {phone}")
+                else:
+                    logger.warning(f"No valid OTP record found for phone {phone}")
+        except Exception as e:
+            logger.error(f"Error querying OTP from database: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Database error while verifying OTP")
+        
+        if not stored_otp or not otp_record:
+            try:
+                audit.log('otp_not_found', phone, request_id=request_id, 
+                          ip_address=client_info.get('ip_address'), success=False)
+            except Exception as audit_err:
+                logger.warning(f"Audit log failed: {audit_err}")
+            return VerifyOTPResponse(success=False, message="OTP not found or expired. Please request a new OTP.", data={"error": "OTP_NOT_FOUND"})
 
-        info = extract_user_info_from_claims(claims)
-        phone = info.get("phone") or payload.get_phone()
-        if not phone:
-            return VerifyOTPResponse(success=False, message="Phone number not found", data={"error": "MISSING_PHONE"})
+        # Verify OTP by comparing with stored OTP
+        try:
+            otp_service = OTPService()
+            is_valid = otp_service.verify_otp(phone, otp_code, stored_otp)
+            
+            if not is_valid:
+                logger.warning(f"OTP verification failed for phone {phone}")
+                try:
+                    audit.log('otp_verification_failed', phone, request_id=request_id, 
+                              ip_address=client_info.get('ip_address'), success=False)
+                except Exception as audit_err:
+                    logger.warning(f"Audit log failed: {audit_err}")
+                return VerifyOTPResponse(success=False, message="Invalid or expired OTP", data={"error": "INVALID_OTP"})
+        except Exception as e:
+            logger.error(f"Error verifying OTP: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Error verifying OTP")
+        
+        # Mark OTP as used
+        try:
+            with Session(engine) as session:
+                # Refresh the record to ensure we have the latest version
+                otp_record = session.exec(
+                    select(OTPCode).where(
+                        OTPCode.id == otp_record.id,
+                        OTPCode.is_used == False
+                    )
+                ).first()
+                if otp_record:
+                    otp_record.is_used = True
+                    session.add(otp_record)
+                    session.commit()
+                    logger.info(f"Marked OTP as used for phone {phone}")
+        except Exception as e:
+            logger.error(f"Error marking OTP as used: {e}", exc_info=True)
+            # Don't fail the verification if we can't mark it as used
 
-        # Check if this is a test phone number from Firebase
-        is_test_number = is_test_phone_number(phone)
-        if is_test_number:
-            logger.info(f"Test phone number detected in firebase_verify: {phone} - Authorization allowed")
+        # Find or create user based on flow
+        try:
+            with Session(engine) as session:
+                user = session.exec(select(User).where(User.phone == phone)).first()
+                
+                if flow == "register":
+                    if not user:
+                        audit.log('register_verify_user_not_found', phone, request_id=request_id, 
+                                  ip_address=client_info.get('ip_address'), success=False)
+                        return VerifyOTPResponse(success=False, message="User not found. Please register first.", data={"error": "USER_NOT_FOUND"})
+                    # Mark user as verified after OTP confirmation
+                    user.is_verified = True
+                    user.is_active = True
+                    session.add(user)
+                    session.commit()
+                    session.refresh(user)
+                else:
+                    # Login flow
+                    if not user:
+                        audit.log('login_user_not_found', phone, request_id=request_id, 
+                                  ip_address=client_info.get('ip_address'), success=False)
+                        return VerifyOTPResponse(success=False, message="User not found. Please register first.", data={"error": "USER_NOT_FOUND"})
 
-        # Find or create user
-        with Session(engine) as session:
-            user = session.exec(select(User).where(User.phone == phone)).first()
-            if not user:
-                user = User(
-                    id=str(uuid.uuid4()),
-                    name=info.get("name") or "User",
-                    phone=phone,
-                    country_code=extract_country_code(phone),
-                    is_verified=True,
-                    is_active=True
-                )
-                session.add(user)
-                session.commit()
-                session.refresh(user)
-                if is_test_number:
-                    logger.info(f"Created user for test phone number in firebase_verify: {phone}")
+                    # Mark user as verified
+                    user.is_verified = True
+                    user.is_active = True
+                    session.add(user)
+                    session.commit()
+                    session.refresh(user)
+        except Exception as e:
+            logger.error(f"Error finding/updating user: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Error processing user data")
 
-            # Mark verified
-            user.is_verified = True
-            session.add(user)
-            session.commit()
-            session.refresh(user)
-
-        access_token = create_jwt_token({"sub": user.id})
-        refresh_token = create_refresh_token({"sub": user.id})
+        # Issue JWTs
+        try:
+            access_token = create_jwt_token({"sub": user.id})
+            refresh_token = create_refresh_token({"sub": user.id})
+        except Exception as e:
+            logger.error(f"Error creating JWT tokens: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Error generating authentication tokens")
         
         # Create user session
-        with Session(engine) as session:
-            user_session = UserSession(
-                user_id=user.id,
-                token=access_token,
-                refresh_token=refresh_token,
-                expires_at=datetime.utcnow() + timedelta(days=30)
-            )
-            session.add(user_session)
-            session.commit()
+        try:
+            with Session(engine) as session:
+                user_session = UserSession(
+                    user_id=user.id,
+                    token=access_token,
+                    refresh_token=refresh_token,
+                    expires_at=datetime.utcnow() + timedelta(days=30)
+                )
+                session.add(user_session)
+                session.commit()
+        except Exception as e:
+            logger.error(f"Error creating user session: {e}", exc_info=True)
+            # Don't fail if session creation fails, tokens are still valid
         
         # Prepare user response
-        user_response = UserResponse(
-            id=user.id,
-            name=user.name,
-            
-            phone=user.phone,
-            age=user.age,
-            profile_image_url=user.profile_image_url,
-            date_of_birth=user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else None,
-            created_at=user.created_at,
-            updated_at=user.updated_at
-        )
+        try:
+            user_response = UserResponse(
+                id=user.id,
+                name=user.name,
+                phone=user.phone,
+                age=user.age,
+                profile_image_url=user.profile_image_url,
+                date_of_birth=user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else None,
+                created_at=user.created_at,
+                updated_at=user.updated_at
+            )
+        except Exception as e:
+            logger.error(f"Error creating user response: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Error preparing user data")
         
-        # Set httpOnly cookie so browsers can load protected assets (e.g., images) without Authorization header
+        # Set httpOnly cookie
         try:
             response.set_cookie(
                 key="access_token",
@@ -1110,12 +1205,14 @@ async def firebase_verify(payload: VerifyOTPRequest, response: Response, auth_se
                 max_age=60 * 60
             )
         except Exception:
-            # Non-fatal: continue without cookie if setting fails
             pass
+
+        audit.log('otp_verification_success', phone, user.id, request_id, 
+                  client_info.get('ip_address'), True)
 
         return VerifyOTPResponse(
             success=True,
-            message="Authenticated via Firebase",
+            message="OTP verified successfully",
             data={
                 "user": user_response.dict(),
                 "token": access_token,
@@ -1123,13 +1220,89 @@ async def firebase_verify(payload: VerifyOTPRequest, response: Response, auth_se
             }
         )
         
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        logger.error(f"Verify OTP error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Verify OTP error: {e}", exc_info=True)
+        try:
+            phone_debug = payload.get_phone() if payload else 'N/A'
+            logger.error(f"Request details - phone: {phone_debug}")
+        except:
+            pass
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @router.post("/resend-otp", response_model=ResendOTPResponse)
-async def resend_otp(_: ResendOTPRequest):
-    return ResendOTPResponse(success=False, message="OTP flow disabled; use Firebase sign-in", data={"error": "DISABLED"})
+async def resend_otp(payload: ResendOTPRequest, request: Request, audit: AuditLogger = Depends(get_audit_logger), limiter: RateLimiter = Depends(get_rate_limiter)):
+    """
+    Resend OTP code via SMS
+    """
+    request_id = str(uuid.uuid4())
+    client_info = get_client_info(request)
+    
+    try:
+        # Rate limiting
+        if not limiter.allow_request(f"resend_otp:{payload.phone}", MAX_REQUESTS_PER_WINDOW, RATE_LIMIT_WINDOW_HOURS * 3600):
+            audit.log('rate_limit_exceeded', payload.phone, request_id=request_id, 
+                      ip_address=client_info['ip_address'], success=False)
+            return ResendOTPResponse(
+                success=False,
+                message="Too many resend requests. Please try again later.",
+                data={"error": "RATE_LIMIT_EXCEEDED"}
+            )
+
+        # Send OTP via 2factor.in
+        try:
+            otp_service = OTPService()
+            otp_code_sent = otp_service.send_otp(payload.phone)
+            
+            if not otp_code_sent:
+                try:
+                    audit.log('otp_resend_failed', payload.phone, request_id=request_id, 
+                              ip_address=client_info.get('ip_address'), success=False)
+                except Exception as audit_err:
+                    logger.warning(f"Audit log failed: {audit_err}")
+                return ResendOTPResponse(
+                    success=False,
+                    message="Failed to send OTP",
+                    data={"error": "SEND_FAILED"}
+                )
+
+            # Store OTP code in database for verification
+            with Session(engine) as session:
+                otp_record = OTPCode(
+                    phone=payload.phone,
+                    otp=otp_code_sent,  # Store the OTP code for verification
+                    flow="login",  # Default to login flow for resend
+                    session_id=None,  # Not used with new SMS endpoint
+                    expires_at=datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
+                )
+                session.add(otp_record)
+                session.commit()
+                logger.info(f"OTP stored successfully for phone: {payload.phone}")
+
+            try:
+                audit.log('otp_resend_success', payload.phone, request_id=request_id, 
+                          ip_address=client_info.get('ip_address'), success=True, details={'otp_sent': True})
+            except Exception as audit_err:
+                logger.warning(f"Audit log failed: {audit_err}")
+        except Exception as e:
+            logger.error(f"Error resending OTP: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Error resending OTP: {str(e)}")
+
+        return ResendOTPResponse(
+            success=True,
+            message="OTP resent successfully",
+            data={
+                "phone": payload.phone,
+                "request_id": request_id,
+                "otp_expires_in": OTP_EXPIRY_MINUTES * 60,
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Resend OTP error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # Production monitoring endpoints
 @router.get("/health")
@@ -1146,7 +1319,7 @@ async def health_check():
             "timestamp": datetime.utcnow().isoformat(),
             "services": {
                 "database": "healthy",
-            "auth": "firebase"
+            "auth": "2fa_otp"
             },
             "version": "1.0.0"
         }
@@ -1709,4 +1882,4 @@ async def delete_account(
 # Legacy endpoints for backward compatibility
 @router.get("/ping")
 def auth_ping():
-    return {"ok": True, "auth": "firebase"}
+    return {"ok": True, "auth": "2fa_otp"}
