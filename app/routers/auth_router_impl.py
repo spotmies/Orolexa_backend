@@ -42,11 +42,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="", tags=["Authentication"])
 
-# Production constants
-MAX_OTP_ATTEMPTS = 5
-OTP_EXPIRY_MINUTES = 10
-RATE_LIMIT_WINDOW_HOURS = 1
-MAX_REQUESTS_PER_WINDOW = 3
+# Production constants - can be overridden via environment variables
+from app.core.config import settings as app_settings
+MAX_OTP_ATTEMPTS = int(os.environ.get("MAX_OTP_ATTEMPTS", "5"))
+OTP_EXPIRY_MINUTES = int(os.environ.get("OTP_EXPIRY_MINUTES", "10"))
+RATE_LIMIT_WINDOW_HOURS = float(os.environ.get("RATE_LIMIT_WINDOW_HOURS", "1"))
+# Increased to 50 for development - set MAX_REQUESTS_PER_WINDOW env var to override
+MAX_REQUESTS_PER_WINDOW = int(os.environ.get("MAX_REQUESTS_PER_WINDOW", "50"))
 SESSION_EXPIRY_DAYS = 30
 
 # Authentication now uses 2FA with Twilio OTP (SMS)

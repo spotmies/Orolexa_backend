@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 60
     REDIS_URL: Optional[str] = os.environ.get("REDIS_URL", None)
+    # OTP Rate Limiting (configurable)
+    MAX_REQUESTS_PER_WINDOW: int = int(os.environ.get("MAX_REQUESTS_PER_WINDOW", "10"))  # Requests per window
+    RATE_LIMIT_WINDOW_HOURS: float = float(os.environ.get("RATE_LIMIT_WINDOW_HOURS", "1"))  # Time window in hours
     
     # Health Check
     HEALTH_CHECK_ENABLED: bool = True
