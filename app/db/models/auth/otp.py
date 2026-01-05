@@ -8,8 +8,9 @@ class OTPCode(SQLModel, table=True):
     __tablename__ = "otp_codes"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
     phone: str = Field(max_length=20, index=True)
-    otp: str = Field(max_length=6)
+    otp: Optional[str] = Field(default=None, max_length=6, description="OTP code sent to user")
     flow: str = Field(max_length=10)
+    session_id: Optional[str] = Field(default=None, max_length=200, description="Legacy: 2factor.in session ID (not used with new SMS endpoint)")
     is_used: bool = Field(default=False)
     expires_at: datetime
     created_at: datetime = Field(default_factory=datetime.utcnow)

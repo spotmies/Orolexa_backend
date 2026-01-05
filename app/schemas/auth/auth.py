@@ -8,13 +8,12 @@ from PIL import Image
 from datetime import datetime
 
 class LoginRequest(BaseModel):
-    firebase_id_token: str = Field(..., description="Firebase ID token from client SDK")
-    phone: Optional[str] = Field(None, description="Phone number with country code (legacy)")
+    phone: str = Field(..., description="Phone number with country code (e.g., +1234567890)")
 
     @validator('phone')
     def validate_phone(cls, v):
         if v is None:
-            return v
+            raise ValueError('Phone number is required')
         phone_clean = re.sub(r'[^\d+]', '', v)
         if not re.match(r'^\+\d{1,4}\d{6,14}$', phone_clean):
             raise ValueError('Invalid phone number format. Must include country code (e.g., +1234567890)')
@@ -26,9 +25,8 @@ class LoginResponse(BaseModel):
     data: Dict[str, Any]
 
 class RegisterRequest(BaseModel):
-    firebase_id_token: str = Field(..., description="Firebase ID token from client SDK")
-    name: Optional[str] = Field(None, min_length=2, max_length=100, description="User's full name")
-    phone: Optional[str] = Field(None, description="Phone number with country code (legacy)")
+    name: str = Field(..., min_length=2, max_length=100, description="User's full name")
+    phone: str = Field(..., description="Phone number with country code (e.g., +1234567890)")
     age: Optional[int] = Field(None, ge=1, le=120, description="User's age")
     profile_image: Optional[str] = Field(None, description="Profile image (base64 encoded, file path, or data URL)")
     date_of_birth: Optional[str] = Field(None, description="Date of birth in YYYY-MM-DD format")
@@ -108,13 +106,18 @@ class VerifyOTPRequest(BaseModel):
             raise ValueError('Flow must be either "login" or "register"')
         return v
 
-    def get_phone(self) -> str:
-        return self.phone or self.mobile_number
+    def get_phone(self) -> Optional[str]:
+        """Get phone number from either phone or mobile_number field"""
+        result = self.phone or self.mobile_number
+        return result.strip() if result else None
 
-    def get_otp(self) -> str:
-        return self.otp or self.otp_code
+    def get_otp(self) -> Optional[str]:
+        """Get OTP code from either otp or otp_code field"""
+        result = self.otp or self.otp_code
+        return result.strip() if result else None
 
     def get_flow(self) -> str:
+        """Get flow type, defaulting to 'login' if not specified"""
         return self.flow or 'login'
 
 class VerifyOTPResponse(BaseModel):
