@@ -1,4 +1,6 @@
 import pytest
+from dataclasses import dataclass
+from datetime import datetime, date
 
 # AppointmentsService not found in current codebase
 
