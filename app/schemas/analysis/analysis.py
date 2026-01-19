@@ -25,7 +25,9 @@ class MLDetection(BaseModel):
 
 class DetectedIssue(BaseModel):
     issue: str = Field(..., description="Description of the detected dental issue")
-    location: str = Field(..., description="Location of the issue (e.g., 'Upper Right Molar', 'Lower Left')")
+    location: str = Field(..., description="Location of the issue with tooth number and name (e.g., 'Tooth #16 (Upper Right First Molar)')")
+    tooth_number: Optional[str] = Field(None, description="FDI tooth number(s) (e.g., '16' or '36,37' for multiple teeth)")
+    tooth_name: Optional[str] = Field(None, description="Full tooth name (e.g., 'Upper Right First Molar')")
     severity: str = Field(..., description="Severity level: mild, moderate, severe")
 
 class PositiveAspect(BaseModel):
