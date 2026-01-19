@@ -793,29 +793,29 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
         # Check if user exists
         user = None
         try:
-        with Session(engine) as session:
-            user = session.exec(
+            with Session(engine) as session:
+                user = session.exec(
                     select(User).where(User.phone == phone)
-            ).first()
+                ).first()
         except Exception as db_err:
             logger.error(f"Database error checking user: {db_err}", exc_info=True)
             raise HTTPException(status_code=500, detail="Database error while checking user")
             
-            if not user:
+        if not user:
             try:
                 audit.log('login_user_not_found', phone, request_id=request_id, 
                           ip_address=client_info.get('ip_address'), success=False)
             except Exception as audit_err:
                 logger.warning(f"Audit log failed: {audit_err}")
-                return LoginResponse(
-                    success=False,
-                    message="User not found. Please register first.",
-                    data={"error": "USER_NOT_FOUND"}
-                )
+            return LoginResponse(
+                success=False,
+                message="User not found. Please register first.",
+                data={"error": "USER_NOT_FOUND"}
+            )
 
         # Send OTP via 2factor.in
         try:
-        otp_service = OTPService()
+            otp_service = OTPService()
             otp_code_sent = otp_service.send_otp(phone)
         
             if not otp_code_sent:
@@ -834,16 +834,16 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
 
         # Store OTP code in database for verification
         try:
-        with Session(engine) as session:
+            with Session(engine) as session:
                 otp_record = OTPCode(
                     phone=phone,
                     otp=otp_code_sent,  # Store the OTP code for verification
-                flow="login",
+                    flow="login",
                     session_id=None,  # Not used with new SMS endpoint
-                expires_at=datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
-            )
+                    expires_at=datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
+                )
                 session.add(otp_record)
-            session.commit()
+                session.commit()
                 logger.info(f"OTP stored successfully for phone: {phone}")
         except Exception as db_err:
             logger.error(f"Database error storing OTP: {db_err}", exc_info=True)
@@ -967,8 +967,8 @@ async def register(
         except Exception as e:
             logger.error(f"Failed to send OTP: {e}", exc_info=True)
             try:
-            audit.log('otp_send_failed', phone, request_id=request_id, 
-                      ip_address=client_info.get('ip_address'), success=False, details={'error': str(e)})
+                audit.log('otp_send_failed', phone, request_id=request_id, 
+                          ip_address=client_info.get('ip_address'), success=False, details={'error': str(e)})
             except Exception as audit_err:
                 logger.warning(f"Audit log failed: {audit_err}")
             raise HTTPException(status_code=500, detail="Failed to send OTP")
@@ -991,7 +991,7 @@ async def register(
         
         # Audit logging for successful registration
         try:
-        audit.log('register_otp_sent', phone, user_id, request_id=request_id, 
+            audit.log('register_otp_sent', phone, user_id, request_id=request_id, 
                       ip_address=client_info.get('ip_address'), success=True, details={'otp_sent': True})
         except Exception as audit_err:
             logger.warning(f"Audit log failed: {audit_err}")
@@ -1061,17 +1061,17 @@ async def verify_otp(payload: VerifyOTPRequest, response: Response, request: Req
         stored_otp = None
         otp_record = None
         try:
-        with Session(engine) as session:
-            # Find the most recent unused OTP code for this phone
-            otp_record = session.exec(
-                select(OTPCode).where(
-                    OTPCode.phone == phone,
-                    OTPCode.is_used == False,
-                    OTPCode.expires_at > datetime.utcnow()
-                ).order_by(OTPCode.created_at.desc())
-            ).first()
-            
-            if otp_record:
+            with Session(engine) as session:
+                # Find the most recent unused OTP code for this phone
+                otp_record = session.exec(
+                    select(OTPCode).where(
+                        OTPCode.phone == phone,
+                        OTPCode.is_used == False,
+                        OTPCode.expires_at > datetime.utcnow()
+                    ).order_by(OTPCode.created_at.desc())
+                ).first()
+                
+                if otp_record:
                     stored_otp = otp_record.otp
                     logger.info(f"Found OTP record for phone {phone}")
                 else:
@@ -1090,35 +1090,35 @@ async def verify_otp(payload: VerifyOTPRequest, response: Response, request: Req
 
         # Verify OTP by comparing with stored OTP
         try:
-        otp_service = OTPService()
+            otp_service = OTPService()
             is_valid = otp_service.verify_otp(phone, otp_code, stored_otp)
-        
-        if not is_valid:
+            
+            if not is_valid:
                 logger.warning(f"OTP verification failed for phone {phone}")
                 try:
-            audit.log('otp_verification_failed', phone, request_id=request_id, 
-                      ip_address=client_info.get('ip_address'), success=False)
+                    audit.log('otp_verification_failed', phone, request_id=request_id, 
+                              ip_address=client_info.get('ip_address'), success=False)
                 except Exception as audit_err:
                     logger.warning(f"Audit log failed: {audit_err}")
-            return VerifyOTPResponse(success=False, message="Invalid or expired OTP", data={"error": "INVALID_OTP"})
+                return VerifyOTPResponse(success=False, message="Invalid or expired OTP", data={"error": "INVALID_OTP"})
         except Exception as e:
             logger.error(f"Error verifying OTP: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Error verifying OTP")
         
         # Mark OTP as used
         try:
-        with Session(engine) as session:
+            with Session(engine) as session:
                 # Refresh the record to ensure we have the latest version
-            otp_record = session.exec(
-                select(OTPCode).where(
+                otp_record = session.exec(
+                    select(OTPCode).where(
                         OTPCode.id == otp_record.id,
-                    OTPCode.is_used == False
-                )
-            ).first()
-            if otp_record:
-                otp_record.is_used = True
-                session.add(otp_record)
-                session.commit()
+                        OTPCode.is_used == False
+                    )
+                ).first()
+                if otp_record:
+                    otp_record.is_used = True
+                    session.add(otp_record)
+                    session.commit()
                     logger.info(f"Marked OTP as used for phone {phone}")
         except Exception as e:
             logger.error(f"Error marking OTP as used: {e}", exc_info=True)
@@ -1126,72 +1126,72 @@ async def verify_otp(payload: VerifyOTPRequest, response: Response, request: Req
 
         # Find or create user based on flow
         try:
-        with Session(engine) as session:
-            user = session.exec(select(User).where(User.phone == phone)).first()
-            
-            if flow == "register":
-                if not user:
-                    audit.log('register_verify_user_not_found', phone, request_id=request_id, 
-                              ip_address=client_info.get('ip_address'), success=False)
-                    return VerifyOTPResponse(success=False, message="User not found. Please register first.", data={"error": "USER_NOT_FOUND"})
-                # Mark user as verified after OTP confirmation
-                user.is_verified = True
-                user.is_active = True
-                session.add(user)
-                session.commit()
-                session.refresh(user)
-            else:
-                # Login flow
-                if not user:
-                    audit.log('login_user_not_found', phone, request_id=request_id, 
-                              ip_address=client_info.get('ip_address'), success=False)
-                    return VerifyOTPResponse(success=False, message="User not found. Please register first.", data={"error": "USER_NOT_FOUND"})
+            with Session(engine) as session:
+                user = session.exec(select(User).where(User.phone == phone)).first()
+                
+                if flow == "register":
+                    if not user:
+                        audit.log('register_verify_user_not_found', phone, request_id=request_id, 
+                                  ip_address=client_info.get('ip_address'), success=False)
+                        return VerifyOTPResponse(success=False, message="User not found. Please register first.", data={"error": "USER_NOT_FOUND"})
+                    # Mark user as verified after OTP confirmation
+                    user.is_verified = True
+                    user.is_active = True
+                    session.add(user)
+                    session.commit()
+                    session.refresh(user)
+                else:
+                    # Login flow
+                    if not user:
+                        audit.log('login_user_not_found', phone, request_id=request_id, 
+                                  ip_address=client_info.get('ip_address'), success=False)
+                        return VerifyOTPResponse(success=False, message="User not found. Please register first.", data={"error": "USER_NOT_FOUND"})
 
-                # Mark user as verified
-                user.is_verified = True
-                user.is_active = True
-                session.add(user)
-                session.commit()
-                session.refresh(user)
+                    # Mark user as verified
+                    user.is_verified = True
+                    user.is_active = True
+                    session.add(user)
+                    session.commit()
+                    session.refresh(user)
         except Exception as e:
             logger.error(f"Error finding/updating user: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Error processing user data")
 
         # Issue JWTs
         try:
-        access_token = create_jwt_token({"sub": user.id})
-        refresh_token = create_refresh_token({"sub": user.id})
+            access_token = create_jwt_token({"sub": user.id})
+            refresh_token = create_refresh_token({"sub": user.id})
         except Exception as e:
             logger.error(f"Error creating JWT tokens: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Error generating authentication tokens")
         
         # Create user session
         try:
-        with Session(engine) as session:
-            user_session = UserSession(
-                user_id=user.id,
-                token=access_token,
-                refresh_token=refresh_token,
-                expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-            )
-            session.add(user_session)
-            session.commit()
+            with Session(engine) as session:
+                user_session = UserSession(
+                    user_id=user.id,
+                    token=access_token,
+                    refresh_token=refresh_token,
+                    expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+                )
+                session.add(user_session)
+                session.commit()
         except Exception as e:
             logger.error(f"Error creating user session: {e}", exc_info=True)
             # Don't fail if session creation fails, tokens are still valid
         
         # Prepare user response
         try:
-        user_response = UserResponse(
-            id=user.id,
-            name=user.name,
-            phone=user.phone,
-            age=user.age,
-            profile_image_url=user.profile_image_url,
-            date_of_birth=user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else None,
-            created_at=user.created_at,
-            updated_at=user.updated_at
-        )
+            user_response = UserResponse(
+                id=user.id,
+                name=user.name,
+                phone=user.phone,
+                age=user.age,
+                profile_image_url=user.profile_image_url,
+                date_of_birth=user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else None,
+                created_at=user.created_at,
+                updated_at=user.updated_at
+            )
         except Exception as e:
             logger.error(f"Error creating user response: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Error preparing user data")
@@ -1255,36 +1255,36 @@ async def resend_otp(payload: ResendOTPRequest, request: Request, audit: AuditLo
 
         # Send OTP via 2factor.in
         try:
-        otp_service = OTPService()
+            otp_service = OTPService()
             otp_code_sent = otp_service.send_otp(payload.phone)
-        
+            
             if not otp_code_sent:
                 try:
-            audit.log('otp_resend_failed', payload.phone, request_id=request_id, 
+                    audit.log('otp_resend_failed', payload.phone, request_id=request_id, 
                               ip_address=client_info.get('ip_address'), success=False)
                 except Exception as audit_err:
                     logger.warning(f"Audit log failed: {audit_err}")
-            return ResendOTPResponse(
-                success=False,
-                message="Failed to send OTP",
-                data={"error": "SEND_FAILED"}
-            )
+                return ResendOTPResponse(
+                    success=False,
+                    message="Failed to send OTP",
+                    data={"error": "SEND_FAILED"}
+                )
 
             # Store OTP code in database for verification
-        with Session(engine) as session:
+            with Session(engine) as session:
                 otp_record = OTPCode(
-                phone=payload.phone,
+                    phone=payload.phone,
                     otp=otp_code_sent,  # Store the OTP code for verification
-                flow="login",  # Default to login flow for resend
+                    flow="login",  # Default to login flow for resend
                     session_id=None,  # Not used with new SMS endpoint
-                expires_at=datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
-            )
+                    expires_at=datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
+                )
                 session.add(otp_record)
-            session.commit()
+                session.commit()
                 logger.info(f"OTP stored successfully for phone: {payload.phone}")
 
             try:
-        audit.log('otp_resend_success', payload.phone, request_id=request_id, 
+                audit.log('otp_resend_success', payload.phone, request_id=request_id, 
                           ip_address=client_info.get('ip_address'), success=True, details={'otp_sent': True})
             except Exception as audit_err:
                 logger.warning(f"Audit log failed: {audit_err}")
