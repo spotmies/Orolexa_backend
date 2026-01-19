@@ -481,96 +481,49 @@ def _process_structured_analysis(session: Session, user_id: str, files):
     # We inject the ML context separately above to avoid Python trying to interpret the JSON
     # template as a format string (which caused "Invalid format specifier" errors).
     prompt = """
-    You are a professional dental AI assistant with expertise in tooth identification and dental anatomy. Analyze the provided dental images and provide a comprehensive dental health assessment with ACCURATE TOOTH IDENTIFICATION using the FDI (International) tooth numbering system.
+    You are a professional dental AI assistant with expertise in tooth identification and dental anatomy. Analyze the provided dental images and provide a comprehensive dental health assessment with accurate, patient-friendly descriptions.
 
     {ml_context}
 
-    **TOOTH NUMBERING SYSTEM (FDI):**
-    - Quadrant 1 (Upper Right): Teeth 11-18 (11=Central Incisor, 12=Lateral Incisor, 13=Canine, 14=First Premolar, 15=Second Premolar, 16=First Molar, 17=Second Molar, 18=Third Molar/Wisdom)
-    - Quadrant 2 (Upper Left): Teeth 21-28 (21=Central Incisor, 22=Lateral Incisor, 23=Canine, 24=First Premolar, 25=Second Premolar, 26=First Molar, 27=Second Molar, 28=Third Molar/Wisdom)
-    - Quadrant 3 (Lower Left): Teeth 31-38 (31=Central Incisor, 32=Lateral Incisor, 33=Canine, 34=First Premolar, 35=Second Premolar, 36=First Molar, 37=Second Molar, 38=Third Molar/Wisdom)
-    - Quadrant 4 (Lower Right): Teeth 41-48 (41=Central Incisor, 42=Lateral Incisor, 43=Canine, 44=First Premolar, 45=Second Premolar, 46=First Molar, 47=Second Molar, 48=Third Molar/Wisdom)
-
     **CRITICAL INSTRUCTIONS:**
-    1. Identify SPECIFIC teeth visible in the image using FDI numbers (e.g., "16" for Upper Right First Molar)
-    2. For each issue detected, specify the EXACT tooth number and full tooth name
-    3. Use precise anatomical positioning (e.g., "Tooth #16 (Upper Right First Molar)" or "Teeth #11-21 (Upper Central Incisors)")
-    4. If multiple teeth are affected, list all tooth numbers
+    1. Identify SPECIFIC teeth visible in the image
+    2. For each issue detected, use clear, patient-friendly descriptions WITHOUT technical tooth numbers
+    3. Use simple anatomical positioning (e.g., "Upper Right First Molar", "Lower Left Back Teeth", "Upper Front Teeth")
+    4. If multiple teeth are affected, describe them clearly (e.g., "Lower Left Molars", "Upper Front Teeth")
     5. Carefully examine the image orientation to determine left/right correctly (patient's left/right, not viewer's)
+    6. DO NOT use technical tooth numbering like #16, #36, etc. - patients don't understand these codes
 
     **IMPORTANT: Respond ONLY with valid JSON in the exact format below. Do not include any other text or explanations.**
+    
+    **NOTE: The example below is just a FORMAT TEMPLATE. You MUST analyze the ACTUAL IMAGE provided and replace these example values with your real findings from the image. Do NOT copy these example values - they are only showing you the JSON structure to follow.**
 
+    **EXAMPLE JSON FORMAT (analyze the actual image and provide YOUR OWN findings):**
     {
-        "health_score": 3.5,
-        "health_status": "fair",
-        "risk_level": "moderate",
+        "health_score": <your_calculated_score_0_to_5>,
+        "health_status": "<your_assessment: excellent/good/fair/poor/critical>",
+        "risk_level": "<your_assessment: low/moderate/high/critical>",
         "detected_issues": [
             {
-                "issue": "Dental Cavity",
-                "location": "Tooth #16 (Upper Right First Molar)",
-                "tooth_number": "16",
-                "tooth_name": "Upper Right First Molar",
-                "severity": "moderate"
-            },
-            {
-                "issue": "Gum Inflammation (Gingivitis)",
-                "location": "Teeth #36-37 (Lower Left First and Second Molars)",
-                "tooth_number": "36,37",
-                "tooth_name": "Lower Left First and Second Molars",
-                "severity": "mild"
-            },
-            {
-                "issue": "Plaque Accumulation",
-                "location": "Teeth #11-21 (Upper Central Incisors)",
-                "tooth_number": "11,21",
-                "tooth_name": "Upper Central Incisors",
-                "severity": "mild"
-            },
-            {
-                "issue": "Tooth Discoloration",
-                "location": "Tooth #46 (Lower Right First Molar)",
-                "tooth_number": "46",
-                "tooth_name": "Lower Right First Molar",
-                "severity": "mild"
+                "issue": "<describe the actual issue you see in the image>",
+                "location": "<specify the exact tooth/area where you see this issue>",
+                "severity": "<mild/moderate/severe based on what you observe>"
             }
+            <add more issues as you find them in the image>
         ],
         "positive_aspects": [
             {
-                "aspect": "Teeth #11-21 (Upper Incisors) show good alignment"
-            },
-            {
-                "aspect": "No signs of enamel erosion on anterior teeth"
-            },
-            {
-                "aspect": "Gums around teeth #13-23 (Upper Canines) are healthy"
-            },
-            {
-                "aspect": "No visible cracks or fractures"
+                "aspect": "<describe actual positive observations from the image>"
             }
+            <add more positive findings as you observe them>
         ],
         "recommendations": [
             {
-                "recommendation": "Schedule professional cleaning for plaque removal, especially around teeth #11-21",
-                "priority": "high"
-            },
-            {
-                "recommendation": "Visit dentist for cavity treatment on tooth #16 (Upper Right First Molar)",
-                "priority": "high"
-            },
-            {
-                "recommendation": "Improve brushing technique for lower left molars (teeth #36-37) to reduce gum inflammation",
-                "priority": "medium"
-            },
-            {
-                "recommendation": "Consider teeth whitening consultation for tooth #46 discoloration",
-                "priority": "low"
-            },
-            {
-                "recommendation": "Use fluoride toothpaste and floss daily, especially between molars",
-                "priority": "medium"
+                "recommendation": "<provide specific advice based on the actual findings>",
+                "priority": "<low/medium/high based on urgency>"
             }
+            <add more recommendations based on actual findings>
         ],
-        "summary": "Your dental health shows moderate concerns with a cavity on tooth #16 (Upper Right First Molar) and mild gum inflammation around teeth #36-37 (Lower Left Molars). Upper incisors (#11-21) show good alignment. Focus on professional cleaning and improved oral hygiene routine, especially around the affected molars."
+        "summary": "<write a comprehensive summary of YOUR ACTUAL FINDINGS from analyzing this specific image>"
     }
 
     **FIELD REQUIREMENTS:**
@@ -579,15 +532,25 @@ def _process_structured_analysis(session: Session, user_id: str, files):
     - Risk level: "low", "moderate", "high", "critical"
     - Severity: "mild", "moderate", "severe"
     - Priority: "low", "medium", "high"
-    - tooth_number: FDI number(s) as string (e.g., "16" or "36,37" for multiple)
-    - tooth_name: Full descriptive name (e.g., "Upper Right First Molar" or "Lower Left Molars")
-    - location: Must include both tooth number and name for accuracy
+    - location: Use simple, descriptive terms (e.g., "Upper Right First Molar", "Lower Left Molars", "Upper Front Teeth")
+    - DO NOT include tooth numbers (like #16, #36) in any field - only use descriptive names
+
+    **LOCATION TERMINOLOGY TO USE:**
+    - "Upper Right/Left Front Teeth" (for incisors)
+    - "Upper Right/Left Canine" (for canines)
+    - "Upper Right/Left Premolars" (for premolars)
+    - "Upper Right/Left First/Second Molar" (for molars)
+    - "Lower Right/Left Front Teeth" (for incisors)
+    - "Lower Right/Left Canine" (for canines)
+    - "Lower Right/Left Premolars" (for premolars)
+    - "Lower Right/Left First/Second Molar" (for molars)
+    - Or general terms like "Back Teeth", "Front Teeth", etc.
 
     **IMPORTANT NOTES:**
+    - Use patient-friendly language without technical tooth numbers
     - Always verify tooth position from the patient's perspective (their left/right)
-    - When uncertain about specific tooth numbers, use ranges (e.g., "14-16" for multiple teeth in same area)
-    - For general issues affecting multiple areas, still try to specify tooth numbers if visible
-    - Pay attention to tooth morphology (incisors are thin, molars are wider) to aid identification
+    - Use clear, descriptive anatomical terms that patients can understand
+    - Focus on location clarity without overwhelming with technical details
     """
 
     try:
@@ -657,7 +620,7 @@ def _process_structured_analysis(session: Session, user_id: str, files):
             "health_score": 3.0,
             "health_status": "fair",
             "risk_level": "moderate",
-            "detected_issues": [{"issue": "Analysis incomplete", "location": "General Area", "tooth_number": None, "tooth_name": None, "severity": "mild"}],
+            "detected_issues": [{"issue": "Analysis incomplete", "location": "General", "severity": "mild"}],
             "positive_aspects": [{"aspect": "Images received for analysis"}],
             "recommendations": [{"recommendation": "Please try again with clearer images", "priority": "medium"}],
             "summary": "Unable to complete analysis. Please ensure images are clear and well-lit."
@@ -842,21 +805,19 @@ async def quick_assessment(
         raise HTTPException(status_code=404, detail="User not found")
 
     prompt = """
-You are a professional dental AI assistant with expertise in tooth identification. Analyze the provided dental image and provide a structured quick assessment.
-
-**TOOTH IDENTIFICATION:**
-Use the FDI tooth numbering system when describing locations:
-- Quadrant 1 (Upper Right): Teeth 11-18 (11=Central Incisor, 16=First Molar, etc.)
-- Quadrant 2 (Upper Left): Teeth 21-28
-- Quadrant 3 (Lower Left): Teeth 31-38
-- Quadrant 4 (Lower Right): Teeth 41-48
+You are a professional dental AI assistant. Analyze the provided dental image and provide a structured quick assessment.
 
 **INSTRUCTIONS:**
-1. Identify specific teeth visible in the image using FDI tooth numbers
-2. For any issues detected, specify the exact tooth number and name (e.g., "Tooth #16 (Upper Right First Molar)")
-3. Provide clear, accurate dental health assessment with precise tooth locations
+1. Identify specific teeth visible in the image
+2. For any issues detected, use clear, patient-friendly descriptions (e.g., "Upper Right First Molar", "Lower Left Back Teeth")
+3. Provide clear, accurate dental health assessment with easy-to-understand tooth locations
 
-**IMPORTANT: Include specific tooth positions in your analysis. Use accurate anatomical terminology.**
+**IMPORTANT LOCATION TERMS:**
+- Use "Upper/Lower Right/Left Front Teeth" for incisors
+- Use "Upper/Lower Right/Left Canine" for canines
+- Use "Upper/Lower Right/Left Back Teeth" or "Molars" for back teeth
+- DO NOT use technical tooth numbers (like #16, #36, etc.) - patients don't understand these
+- Use simple, descriptive language that any patient can understand
 """
     results = _process_images(session, current_user, files, prompt)
     return {"success": True, "data": {"message": "Quick assessment completed", "results": results}}
@@ -880,9 +841,9 @@ async def detailed_analysis(
 
     prompt = """Analyze the provided dental image and provide a detailed analysis with accurate tooth identification.
 
-Use FDI tooth numbering system (11-18 Upper Right, 21-28 Upper Left, 31-38 Lower Left, 41-48 Lower Right).
-For each issue or observation, specify the exact tooth number and full name (e.g., "Tooth #16 (Upper Right First Molar)").
-Carefully examine the image to correctly identify teeth positions from the patient's perspective."""
+For each issue or observation, use clear, patient-friendly descriptions (e.g., "Upper Right First Molar", "Lower Front Teeth").
+DO NOT use technical tooth numbers (like #16, #36). Use simple anatomical terms that patients can understand.
+Carefully examine the image to correctly identify teeth positions from the patient's perspective (their left/right)."""
     results = _process_images(session, current_user, files, prompt)
     return {"success": True, "data": {"message": "Detailed analysis completed", "results": results}}
 
@@ -905,9 +866,9 @@ async def analyze_images(
 
     prompt = """Analyze the dental image and provide your assessment with specific tooth identification.
 
-Use FDI tooth numbering (11-18 Upper Right, 21-28 Upper Left, 31-38 Lower Left, 41-48 Lower Right).
-Identify exact teeth positions for any issues detected (e.g., "Tooth #16 (Upper Right First Molar)").
-Provide accurate tooth locations from the patient's anatomical perspective."""
+Use patient-friendly language to describe tooth positions (e.g., "Upper Right Back Molar", "Lower Front Teeth").
+DO NOT use technical tooth numbers (like #16, #36, etc.). Use clear, simple descriptions.
+Provide accurate tooth locations from the patient's perspective using easy-to-understand terms."""
     results = _process_images(session, user.id, files, prompt)
     return {"success": True, "data": {"message": "Analysis completed", "results": results}}
 
