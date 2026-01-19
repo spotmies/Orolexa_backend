@@ -1,5 +1,5 @@
 # app/auth.py
-from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks, UploadFile, File, Form, Response
+from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks, UploadFile, File, Form, Response, Body
 from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 from ..db.session import engine
@@ -1885,3 +1885,55 @@ async def delete_account(
 @router.get("/ping")
 def auth_ping():
     return {"ok": True, "auth": "2fa_otp"}
+
+# Admin utility endpoint to clear rate limits
+@router.post("/admin/clear-rate-limit")
+async def clear_rate_limit_admin(
+    phone: str = Body(..., embed=True),
+    admin_key: str = Body(..., embed=True)
+):
+    """
+    Admin endpoint to clear rate limits for a phone number.
+    Requires ADMIN_PASS from config as admin_key.
+    """
+    # Verify admin credentials
+    if admin_key != settings.ADMIN_PASS:
+        raise HTTPException(status_code=403, detail="Invalid admin credentials")
+    
+    try:
+        from app.services.rate_limit.rate_limit_service import RateLimitService
+        rate_limiter = RateLimitService()
+        
+        if rate_limiter.redis_client:
+            # Clear all rate limit keys for this phone
+            patterns = [
+                f"rl:login:{phone}:*",
+                f"rl:register:{phone}:*",
+                f"rl:resend_otp:{phone}:*",
+            ]
+            
+            cleared_count = 0
+            cleared_keys = []
+            
+            for pattern in patterns:
+                keys = rate_limiter.redis_client.keys(pattern)
+                if keys:
+                    # Convert bytes to strings for display
+                    key_names = [k.decode('utf-8') if isinstance(k, bytes) else k for k in keys]
+                    cleared_keys.extend(key_names)
+                    rate_limiter.redis_client.delete(*keys)
+                    cleared_count += len(keys)
+            
+            return {
+                "success": True,
+                "message": f"Cleared {cleared_count} rate limit entries for {phone}",
+                "cleared_keys": cleared_keys
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Redis not available. Rate limits are in-memory and will clear on server restart."
+            }
+    except Exception as e:
+        logger.error(f"Error clearing rate limit: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to clear rate limit: {str(e)}")
