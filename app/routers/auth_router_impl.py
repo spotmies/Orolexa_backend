@@ -781,11 +781,11 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
                               ip_address=client_info.get('ip_address'), success=False)
                 except Exception as audit_err:
                     logger.warning(f"Audit log failed: {audit_err}")
-                return LoginResponse(
-                    success=False,
-                    message="Too many OTP requests. Please try again later.",
-                    data={"error": "RATE_LIMIT_EXCEEDED"}
-                )
+            return LoginResponse(
+                success=False,
+                message="Too many OTP requests. Please try again later.",
+                data={"error": "RATE_LIMIT_EXCEEDED"}
+            )
         except Exception as rate_limit_err:
             logger.error(f"Rate limiting error: {rate_limit_err}", exc_info=True)
             # Continue if rate limiting fails
@@ -800,7 +800,7 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
         except Exception as db_err:
             logger.error(f"Database error checking user: {db_err}", exc_info=True)
             raise HTTPException(status_code=500, detail="Database error while checking user")
-        
+            
         if not user:
             try:
                 audit.log('login_user_not_found', phone, request_id=request_id, 
@@ -817,7 +817,7 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
         try:
             otp_service = OTPService()
             otp_code_sent = otp_service.send_otp(phone)
-            
+        
             if not otp_code_sent:
                 logger.error(f"Failed to send OTP for phone: {phone}")
                 try:
@@ -877,7 +877,7 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
         try:
             audit.log('login_error', phone, request_id=request_id, 
                       ip_address=client_info.get('ip_address'), success=False, 
-                      details={'error': str(e)})
+                  details={'error': str(e)})
         except Exception as audit_err:
             logger.warning(f"Audit log failed: {audit_err}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
@@ -1051,7 +1051,7 @@ async def verify_otp(payload: VerifyOTPRequest, response: Response, request: Req
         if not otp_code or otp_code.strip() == "":
             logger.warning(f"Verify OTP: Missing OTP code in request for phone {phone}")
             return VerifyOTPResponse(success=False, message="OTP code is required", data={"error": "MISSING_OTP"})
-        
+
         # Validate OTP format
         if not otp_code.isdigit() or len(otp_code) != 6:
             logger.warning(f"Verify OTP: Invalid OTP format for phone {phone}")
@@ -1083,7 +1083,7 @@ async def verify_otp(payload: VerifyOTPRequest, response: Response, request: Req
         if not stored_otp or not otp_record:
             try:
                 audit.log('otp_not_found', phone, request_id=request_id, 
-                          ip_address=client_info.get('ip_address'), success=False)
+                      ip_address=client_info.get('ip_address'), success=False)
             except Exception as audit_err:
                 logger.warning(f"Audit log failed: {audit_err}")
             return VerifyOTPResponse(success=False, message="OTP not found or expired. Please request a new OTP.", data={"error": "OTP_NOT_FOUND"})
@@ -1172,7 +1172,7 @@ async def verify_otp(payload: VerifyOTPRequest, response: Response, request: Req
                     user_id=user.id,
                     token=access_token,
                     refresh_token=refresh_token,
-                    expires_at=datetime.utcnow() + timedelta(days=30)
+                    expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
                 )
                 session.add(user_session)
                 session.commit()

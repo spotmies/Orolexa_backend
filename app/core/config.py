@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(default="change-me-in-prod", alias="JWT_SECRET_KEY")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 90
     
     # CORS Settings
     ALLOWED_ORIGINS: str = os.environ.get("ALLOWED_ORIGINS", "*")
