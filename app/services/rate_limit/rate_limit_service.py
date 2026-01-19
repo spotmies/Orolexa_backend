@@ -42,6 +42,8 @@ class RateLimitService:
     def _redis_rate_limit(self, key: str, max_requests: int, window_seconds: int) -> bool:
         """Redis-based rate limiting"""
         try:
+            # Ensure window_seconds is an integer for Redis EXPIRE command
+            window_seconds = int(window_seconds)
             rk = f"rl:{key}:{window_seconds}"
             pipe = self.redis_client.pipeline()
             pipe.incr(rk, 1)
@@ -54,6 +56,8 @@ class RateLimitService:
 
     def _memory_rate_limit(self, key: str, max_requests: int, window_seconds: int) -> bool:
         """Memory-based rate limiting (fallback)"""
+        # Ensure window_seconds is numeric (convert from float if needed)
+        window_seconds = int(window_seconds)
         current_time = time.time()
         window_key = f"{key}:{window_seconds}"
         
@@ -81,6 +85,8 @@ class RateLimitService:
         
         if self.redis_client:
             try:
+                # Ensure window_seconds is an integer
+                window_seconds = int(window_seconds)
                 rk = f"rl:{key}:{window_seconds}"
                 count = self.redis_client.get(rk)
                 return max(0, max_requests - int(count or 0))
