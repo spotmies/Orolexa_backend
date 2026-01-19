@@ -32,7 +32,7 @@ class AuthService:
     def create_refresh_token(self, data: dict) -> str:
         """Create JWT refresh token"""
         to_encode = data.copy()
-        expire = datetime.utcnow() + timedelta(days=30)  # 30 days
+        expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)  # 90 days
         to_encode.update({"exp": expire, "type": "refresh"})
         encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
         return encoded_jwt
@@ -63,7 +63,7 @@ class AuthService:
                 refresh_token=refresh_token,
                 device_info=device_info,
                 ip_address=ip_address,
-                expires_at=datetime.utcnow() + timedelta(days=30)
+                expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
             )
             
             self.session.add(session)
