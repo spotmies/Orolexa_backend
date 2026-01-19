@@ -481,8 +481,22 @@ def _process_structured_analysis(session: Session, user_id: str, files):
     # We inject the ML context separately above to avoid Python trying to interpret the JSON
     # template as a format string (which caused "Invalid format specifier" errors).
     prompt = """
-    You are a professional dental AI assistant. Analyze the provided dental images and provide a comprehensive dental health assessment in the exact JSON format specified below.
+    You are a professional dental AI assistant with expertise in tooth identification and dental anatomy. Analyze the provided dental images and provide a comprehensive dental health assessment with ACCURATE TOOTH IDENTIFICATION using the FDI (International) tooth numbering system.
+
     {ml_context}
+
+    **TOOTH NUMBERING SYSTEM (FDI):**
+    - Quadrant 1 (Upper Right): Teeth 11-18 (11=Central Incisor, 12=Lateral Incisor, 13=Canine, 14=First Premolar, 15=Second Premolar, 16=First Molar, 17=Second Molar, 18=Third Molar/Wisdom)
+    - Quadrant 2 (Upper Left): Teeth 21-28 (21=Central Incisor, 22=Lateral Incisor, 23=Canine, 24=First Premolar, 25=Second Premolar, 26=First Molar, 27=Second Molar, 28=Third Molar/Wisdom)
+    - Quadrant 3 (Lower Left): Teeth 31-38 (31=Central Incisor, 32=Lateral Incisor, 33=Canine, 34=First Premolar, 35=Second Premolar, 36=First Molar, 37=Second Molar, 38=Third Molar/Wisdom)
+    - Quadrant 4 (Lower Right): Teeth 41-48 (41=Central Incisor, 42=Lateral Incisor, 43=Canine, 44=First Premolar, 45=Second Premolar, 46=First Molar, 47=Second Molar, 48=Third Molar/Wisdom)
+
+    **CRITICAL INSTRUCTIONS:**
+    1. Identify SPECIFIC teeth visible in the image using FDI numbers (e.g., "16" for Upper Right First Molar)
+    2. For each issue detected, specify the EXACT tooth number and full tooth name
+    3. Use precise anatomical positioning (e.g., "Tooth #16 (Upper Right First Molar)" or "Teeth #11-21 (Upper Central Incisors)")
+    4. If multiple teeth are affected, list all tooth numbers
+    5. Carefully examine the image orientation to determine left/right correctly (patient's left/right, not viewer's)
 
     **IMPORTANT: Respond ONLY with valid JSON in the exact format below. Do not include any other text or explanations.**
 
@@ -492,61 +506,88 @@ def _process_structured_analysis(session: Session, user_id: str, files):
         "risk_level": "moderate",
         "detected_issues": [
             {
-                "issue": "Cavity Detected",
-                "location": "Upper Right Molar",
+                "issue": "Dental Cavity",
+                "location": "Tooth #16 (Upper Right First Molar)",
+                "tooth_number": "16",
+                "tooth_name": "Upper Right First Molar",
                 "severity": "moderate"
             },
             {
-                "issue": "Gum Inflammation",
-                "location": "Lower Left",
+                "issue": "Gum Inflammation (Gingivitis)",
+                "location": "Teeth #36-37 (Lower Left First and Second Molars)",
+                "tooth_number": "36,37",
+                "tooth_name": "Lower Left First and Second Molars",
                 "severity": "mild"
             },
             {
-                "issue": "Plaque Build-Up",
-                "location": "General",
+                "issue": "Plaque Accumulation",
+                "location": "Teeth #11-21 (Upper Central Incisors)",
+                "tooth_number": "11,21",
+                "tooth_name": "Upper Central Incisors",
+                "severity": "mild"
+            },
+            {
+                "issue": "Tooth Discoloration",
+                "location": "Tooth #46 (Lower Right First Molar)",
+                "tooth_number": "46",
+                "tooth_name": "Lower Right First Molar",
                 "severity": "mild"
             }
         ],
         "positive_aspects": [
             {
-                "aspect": "No signs of enamel erosion"
+                "aspect": "Teeth #11-21 (Upper Incisors) show good alignment"
             },
             {
-                "aspect": "Gums are healthy in most areas"
+                "aspect": "No signs of enamel erosion on anterior teeth"
             },
             {
-                "aspect": "No signs of severe decay"
+                "aspect": "Gums around teeth #13-23 (Upper Canines) are healthy"
             },
             {
-                "aspect": "Good spacing between teeth"
+                "aspect": "No visible cracks or fractures"
             }
         ],
         "recommendations": [
             {
-                "recommendation": "Schedule a dental cleaning to remove plaque buildup",
+                "recommendation": "Schedule professional cleaning for plaque removal, especially around teeth #11-21",
                 "priority": "high"
             },
             {
-                "recommendation": "Use fluoride toothpaste and mouthwash",
+                "recommendation": "Visit dentist for cavity treatment on tooth #16 (Upper Right First Molar)",
+                "priority": "high"
+            },
+            {
+                "recommendation": "Improve brushing technique for lower left molars (teeth #36-37) to reduce gum inflammation",
                 "priority": "medium"
             },
             {
-                "recommendation": "Visit dentist for cavity treatment",
-                "priority": "high"
+                "recommendation": "Consider teeth whitening consultation for tooth #46 discoloration",
+                "priority": "low"
             },
             {
-                "recommendation": "Improve daily flossing routine",
+                "recommendation": "Use fluoride toothpaste and floss daily, especially between molars",
                 "priority": "medium"
             }
         ],
-        "summary": "Your dental health shows moderate concerns with some cavities and gum inflammation, but overall structure is good. Focus on professional cleaning and improved oral hygiene."
+        "summary": "Your dental health shows moderate concerns with a cavity on tooth #16 (Upper Right First Molar) and mild gum inflammation around teeth #36-37 (Lower Left Molars). Upper incisors (#11-21) show good alignment. Focus on professional cleaning and improved oral hygiene routine, especially around the affected molars."
     }
 
-    Health score should be 0-5 (0=critical, 5=excellent)
-    Health status: "excellent", "good", "fair", "poor", "critical"
-    Risk level: "low", "moderate", "high", "critical"
-    Severity: "mild", "moderate", "severe"
-    Priority: "low", "medium", "high"
+    **FIELD REQUIREMENTS:**
+    - Health score: 0-5 (0=critical, 5=excellent)
+    - Health status: "excellent", "good", "fair", "poor", "critical"
+    - Risk level: "low", "moderate", "high", "critical"
+    - Severity: "mild", "moderate", "severe"
+    - Priority: "low", "medium", "high"
+    - tooth_number: FDI number(s) as string (e.g., "16" or "36,37" for multiple)
+    - tooth_name: Full descriptive name (e.g., "Upper Right First Molar" or "Lower Left Molars")
+    - location: Must include both tooth number and name for accuracy
+
+    **IMPORTANT NOTES:**
+    - Always verify tooth position from the patient's perspective (their left/right)
+    - When uncertain about specific tooth numbers, use ranges (e.g., "14-16" for multiple teeth in same area)
+    - For general issues affecting multiple areas, still try to specify tooth numbers if visible
+    - Pay attention to tooth morphology (incisors are thin, molars are wider) to aid identification
     """
 
     try:
@@ -616,7 +657,7 @@ def _process_structured_analysis(session: Session, user_id: str, files):
             "health_score": 3.0,
             "health_status": "fair",
             "risk_level": "moderate",
-            "detected_issues": [{"issue": "Analysis incomplete", "location": "General", "severity": "mild"}],
+            "detected_issues": [{"issue": "Analysis incomplete", "location": "General Area", "tooth_number": None, "tooth_name": None, "severity": "mild"}],
             "positive_aspects": [{"aspect": "Images received for analysis"}],
             "recommendations": [{"recommendation": "Please try again with clearer images", "priority": "medium"}],
             "summary": "Unable to complete analysis. Please ensure images are clear and well-lit."
@@ -801,9 +842,21 @@ async def quick_assessment(
         raise HTTPException(status_code=404, detail="User not found")
 
     prompt = """
-You are a professional dental AI assistant. Analyze the provided dental image and provide a structured quick assessment.
+You are a professional dental AI assistant with expertise in tooth identification. Analyze the provided dental image and provide a structured quick assessment.
 
-**IMPORTANT: Respond in the exact JSON format specified below. Do not include any other text.**
+**TOOTH IDENTIFICATION:**
+Use the FDI tooth numbering system when describing locations:
+- Quadrant 1 (Upper Right): Teeth 11-18 (11=Central Incisor, 16=First Molar, etc.)
+- Quadrant 2 (Upper Left): Teeth 21-28
+- Quadrant 3 (Lower Left): Teeth 31-38
+- Quadrant 4 (Lower Right): Teeth 41-48
+
+**INSTRUCTIONS:**
+1. Identify specific teeth visible in the image using FDI tooth numbers
+2. For any issues detected, specify the exact tooth number and name (e.g., "Tooth #16 (Upper Right First Molar)")
+3. Provide clear, accurate dental health assessment with precise tooth locations
+
+**IMPORTANT: Include specific tooth positions in your analysis. Use accurate anatomical terminology.**
 """
     results = _process_images(session, current_user, files, prompt)
     return {"success": True, "data": {"message": "Quick assessment completed", "results": results}}
@@ -825,7 +878,11 @@ async def detailed_analysis(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    prompt = "Analyze the provided dental image and provide a detailed analysis."
+    prompt = """Analyze the provided dental image and provide a detailed analysis with accurate tooth identification.
+
+Use FDI tooth numbering system (11-18 Upper Right, 21-28 Upper Left, 31-38 Lower Left, 41-48 Lower Right).
+For each issue or observation, specify the exact tooth number and full name (e.g., "Tooth #16 (Upper Right First Molar)").
+Carefully examine the image to correctly identify teeth positions from the patient's perspective."""
     results = _process_images(session, current_user, files, prompt)
     return {"success": True, "data": {"message": "Detailed analysis completed", "results": results}}
 
@@ -846,7 +903,11 @@ async def analyze_images(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    prompt = ("Analyze the dental image and provide your assessment.")
+    prompt = """Analyze the dental image and provide your assessment with specific tooth identification.
+
+Use FDI tooth numbering (11-18 Upper Right, 21-28 Upper Left, 31-38 Lower Left, 41-48 Lower Right).
+Identify exact teeth positions for any issues detected (e.g., "Tooth #16 (Upper Right First Molar)").
+Provide accurate tooth locations from the patient's anatomical perspective."""
     results = _process_images(session, user.id, files, prompt)
     return {"success": True, "data": {"message": "Analysis completed", "results": results}}
 
