@@ -47,9 +47,17 @@ from app.core.config import settings as app_settings
 MAX_OTP_ATTEMPTS = int(os.environ.get("MAX_OTP_ATTEMPTS", "5"))
 OTP_EXPIRY_MINUTES = int(os.environ.get("OTP_EXPIRY_MINUTES", "10"))
 RATE_LIMIT_WINDOW_HOURS = float(os.environ.get("RATE_LIMIT_WINDOW_HOURS", "1"))
-# Increased to 50 for development - set MAX_REQUESTS_PER_WINDOW env var to override
-MAX_REQUESTS_PER_WINDOW = int(os.environ.get("MAX_REQUESTS_PER_WINDOW", "50"))
+# Per-phone OTP rate limit: higher value so each mobile number has its own quota (login + resend only)
+MAX_REQUESTS_PER_WINDOW = int(os.environ.get("MAX_REQUESTS_PER_WINDOW", "150"))
 SESSION_EXPIRY_DAYS = 30
+
+
+def normalize_phone_for_rate_limit(phone: str) -> str:
+    """Normalize phone to digits-only for rate limit key so limits are strictly per mobile number."""
+    if not phone:
+        return ""
+    digits = "".join(c for c in phone if c.isdigit())
+    return digits or phone
 
 # Authentication now uses 2FA with Twilio OTP (SMS)
 
@@ -773,19 +781,20 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
     try:
         logger.info(f"Login request received for phone: {phone}")
         
-        # Rate limiting
+        # Rate limiting: per mobile number only (this phone's OTP requests; other numbers unaffected)
         try:
-            if not limiter.allow_request(f"login:{phone}", MAX_REQUESTS_PER_WINDOW, RATE_LIMIT_WINDOW_HOURS * 3600):
+            phone_key = normalize_phone_for_rate_limit(phone)
+            if not limiter.allow_request(f"login:{phone_key}", MAX_REQUESTS_PER_WINDOW, int(RATE_LIMIT_WINDOW_HOURS * 3600)):
                 try:
                     audit.log('rate_limit_exceeded', phone, request_id=request_id, 
                               ip_address=client_info.get('ip_address'), success=False)
                 except Exception as audit_err:
                     logger.warning(f"Audit log failed: {audit_err}")
-            return LoginResponse(
-                success=False,
-                message="Too many OTP requests. Please try again later.",
-                data={"error": "RATE_LIMIT_EXCEEDED"}
-            )
+                return LoginResponse(
+                    success=False,
+                    message="Too many OTP requests for this number. Please try again later.",
+                    data={"error": "RATE_LIMIT_EXCEEDED"}
+                )
         except Exception as rate_limit_err:
             logger.error(f"Rate limiting error: {rate_limit_err}", exc_info=True)
             # Continue if rate limiting fails
@@ -921,15 +930,7 @@ async def register(
                     data={"error": "PHONE_ALREADY_EXISTS"}
                 )
         
-        # Enhanced rate limiting
-        if not limiter.allow_request(f"register:{phone}", MAX_REQUESTS_PER_WINDOW, RATE_LIMIT_WINDOW_HOURS * 3600):
-            audit.log('rate_limit_exceeded', phone, request_id=request_id, 
-                      ip_address=client_info.get('ip_address'), success=False)
-            return RegisterResponse(
-                success=False,
-                message="Too many registration requests. Please try again later.",
-                data={"error": "RATE_LIMIT_EXCEEDED"}
-            )
+        # No rate limiting on register flow (per product requirement)
         
         # Generate user ID
         user_id = str(uuid.uuid4())
@@ -1243,13 +1244,14 @@ async def resend_otp(payload: ResendOTPRequest, request: Request, audit: AuditLo
     client_info = get_client_info(request)
     
     try:
-        # Rate limiting
-        if not limiter.allow_request(f"resend_otp:{payload.phone}", MAX_REQUESTS_PER_WINDOW, RATE_LIMIT_WINDOW_HOURS * 3600):
+        # Rate limiting: per mobile number only (this phone's resend count; other numbers unaffected)
+        resend_phone_key = normalize_phone_for_rate_limit(payload.phone)
+        if not limiter.allow_request(f"resend_otp:{resend_phone_key}", MAX_REQUESTS_PER_WINDOW, int(RATE_LIMIT_WINDOW_HOURS * 3600)):
             audit.log('rate_limit_exceeded', payload.phone, request_id=request_id, 
                       ip_address=client_info['ip_address'], success=False)
             return ResendOTPResponse(
                 success=False,
-                message="Too many resend requests. Please try again later.",
+                message="Too many resend requests for this number. Please try again later.",
                 data={"error": "RATE_LIMIT_EXCEEDED"}
             )
 
@@ -1905,11 +1907,12 @@ async def clear_rate_limit_admin(
         rate_limiter = RateLimitService()
         
         if rate_limiter.redis_client:
-            # Clear all rate limit keys for this phone
+            # Clear all rate limit keys for this phone (use normalized key to match how we store)
+            phone_key = normalize_phone_for_rate_limit(phone)
             patterns = [
-                f"rl:login:{phone}:*",
-                f"rl:register:{phone}:*",
-                f"rl:resend_otp:{phone}:*",
+                f"rl:login:{phone_key}:*",
+                f"rl:register:{phone_key}:*",
+                f"rl:resend_otp:{phone_key}:*",
             ]
             
             cleared_count = 0
