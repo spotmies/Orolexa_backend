@@ -805,6 +805,7 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
                               ip_address=client_info.get('ip_address'), success=False)
                 except Exception as audit_err:
                     logger.warning(f"Audit log failed: {audit_err}")
+                logger.info(f"Login rejected - rate limit exceeded for phone: {phone}")
                 return LoginResponse(
                     success=False,
                     message="Too many OTP requests for this number. Please try again later.",
@@ -831,6 +832,7 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
                           ip_address=client_info.get('ip_address'), success=False)
             except Exception as audit_err:
                 logger.warning(f"Audit log failed: {audit_err}")
+            logger.info(f"Login rejected - user not found (must register first): {phone}")
             return LoginResponse(
                 success=False,
                 message="User not found. Please register first.",
@@ -884,6 +886,7 @@ async def login(payload: LoginRequest, request: Request, auth_service: AuthServi
         except Exception as audit_err:
             logger.warning(f"Audit log failed: {audit_err}")
 
+        logger.info(f"Login success - OTP sent to phone: {phone}")
         return LoginResponse(
             success=True,
             message="OTP sent successfully. Please verify to complete login.",
