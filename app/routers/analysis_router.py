@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 from sqlmodel import Session as _Session
 import mimetypes
 import os
-import google.generativeai as genai
+from google import genai
 from datetime import datetime
 import traceback
 import logging
@@ -134,49 +134,77 @@ def create_non_dental_response(image_detection: dict) -> dict:
         }
     }
 
-def list_available_models():
-    """List available Gemini models for debugging"""
-    try:
-        models = genai.list_models()
-        available_models = []
-        for model in models:
-            if 'generateContent' in model.supported_generation_methods:
-                available_models.append(model.name)
-        logger.info(f"Available Gemini models: {available_models}")
-        return available_models
-    except Exception as e:
-        logger.error(f"Failed to list available models: {e}")
-        return []
+def _parts_list_to_contents(parts_list):
+    """Convert old-format [text, {mime_type, data}, ...] to new SDK contents."""
+    parts = []
+    for p in parts_list:
+        if isinstance(p, dict) and "mime_type" in p and "data" in p:
+            parts.append({"inline_data": {"mime_type": p["mime_type"], "data": p["data"]}})
+        else:
+            parts.append({"text": str(p)})
+    return [{"role": "user", "parts": parts}]
 
-def get_gemini_model():
-    """Get a working Gemini model, trying fallback models if needed"""
-    # First, try to list available models for debugging
-    available_models = list_available_models()
-    
-    models_to_try = [settings.GEMINI_MODEL] + settings.GEMINI_FALLBACK_MODELS
-    models_to_try = list(dict.fromkeys(models_to_try))  # Remove duplicates while preserving order
-    
+
+class _GeminiModelWrapper:
+    """Wrapper so existing model.generate_content(parts_list) calls work with google.genai Client."""
+
+    def __init__(self, client, model_name: str):
+        self._client = client
+        self._model_name = model_name
+
+    def generate_content(self, parts_list):
+        contents = _parts_list_to_contents(parts_list)
+        return self._client.models.generate_content(
+            model=self._model_name,
+            contents=contents,
+        )
+
+
+def list_available_models():
+    """List available Gemini models for debugging (uses configured fallback list if API list unavailable)."""
+    fallback = list(dict.fromkeys([settings.GEMINI_MODEL] + settings.GEMINI_FALLBACK_MODELS))
+    try:
+        if not settings.GEMINI_API_KEY:
+            return fallback
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        models = list(client.models.list())
+        names = []
+        for m in models:
+            n = getattr(m, "name", None) or getattr(m, "display_name", None)
+            if n:
+                names.append(n if isinstance(n, str) else str(n))
+        if not names:
+            return fallback
+        logger.info(f"Available Gemini models: {names[:10]}{'...' if len(names) > 10 else ''}")
+        return names
+    except Exception as e:
+        logger.debug(f"List models not available: {e}, using configured list")
+        return fallback
+
+
+def get_gemini_model() -> _GeminiModelWrapper:
+    """Get a working Gemini model, trying fallback models if needed."""
+    if not settings.GEMINI_API_KEY:
+        raise Exception("GEMINI_API_KEY is not set")
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    models_to_try = list(dict.fromkeys([settings.GEMINI_MODEL] + settings.GEMINI_FALLBACK_MODELS))
     logger.info(f"Attempting to initialize Gemini model. Trying models: {models_to_try}")
-    
     for model_name in models_to_try:
         try:
             logger.info(f"Trying model: {model_name}")
-            model = genai.GenerativeModel(model_name)
-            # Test if model is accessible by making a simple call
-            test_result = model.generate_content("test")
+            client.models.generate_content(
+                model=model_name,
+                contents=[{"role": "user", "parts": [{"text": "test"}]}],
+            )
             logger.info(f"Successfully initialized Gemini model: {model_name}")
-            return model
+            return _GeminiModelWrapper(client, model_name)
         except Exception as e:
             logger.warning(f"Failed to initialize model {model_name}: {e}")
             continue
-    
-    # If we get here, all models failed
-    logger.error("All Gemini models failed to initialize. Please check your API key and model availability.")
     raise Exception("No working Gemini model found. Please check your API key and model availability.")
 
-logger = logging.getLogger(__name__)
 
-genai.configure(api_key=settings.GEMINI_API_KEY)
+logger = logging.getLogger(__name__)
 
 # Initialize ML service (singleton)
 _ml_service = None

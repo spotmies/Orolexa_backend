@@ -749,25 +749,40 @@ async def get_current_user(request: Request) -> User:
         logger.error(f"Error getting current user: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
-@router.post("/logout")
-async def logout(current_user: User = Depends(get_current_user)):
-    """
-    Logout current user
-    """
+
+async def get_current_user_optional(request: Request) -> Optional[User]:
+    """Get current user from JWT if present; return None if no/invalid token (for logout etc.)."""
     try:
-        # In a real implementation, you might want to:
-        # 1. Invalidate the JWT token (add to blacklist)
-        # 2. Delete the user session from database
-        # 3. Clear any cached data
-        
-        # For now, just return success
-        return {
-            "success": True,
-            "message": "Logout successful"
-        }
-    except Exception as e:
-        logger.error(f"Logout error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        token = None
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+        else:
+            token = request.cookies.get("access_token")
+        if not token:
+            return None
+        payload = decode_jwt_token(token)
+        if not payload:
+            return None
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+        with Session(engine) as session:
+            user = session.exec(select(User).where(User.id == user_id)).first()
+            return user
+    except Exception:
+        return None
+
+
+@router.post("/logout")
+async def logout(current_user: Optional[User] = Depends(get_current_user_optional)):
+    """
+    Logout current user. Succeeds even when no valid token is sent (e.g. client clearing state).
+    """
+    return {
+        "success": True,
+        "message": "Logout successful" if current_user else "Already logged out",
+    }
 
 @router.post("/login", response_model=LoginResponse)
 async def login(payload: LoginRequest, request: Request, auth_service: AuthService = Depends(get_auth_service), audit: AuditLogger = Depends(get_audit_logger), limiter: RateLimiter = Depends(get_rate_limiter)):
