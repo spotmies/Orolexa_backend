@@ -2,6 +2,8 @@
 from pydantic import BaseModel, Field, validator
 from typing import Optional, Dict, Any
 import re
+
+from app.schemas.users.user import UserResponse
 import base64
 import io
 from PIL import Image
@@ -141,6 +143,16 @@ class ResendOTPResponse(BaseModel):
     data: Dict[str, Any]
 
 class AuthResponse(BaseModel):
-    user: "UserResponse"
+    user: UserResponse
     token: str
     refresh_token: str
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: Optional[str] = Field(None, description="Refresh token (or send in cookie)")
+
+
+class RefreshTokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    expires_in: int  # access token lifetime in seconds

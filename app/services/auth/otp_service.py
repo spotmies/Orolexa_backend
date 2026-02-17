@@ -15,8 +15,13 @@ class OTPService:
     """
     OTP Service using 2factor.in API
     API Documentation: https://2factor.in/API/DOCS/Docs.html
-    
-    Uses /SMS/ endpoint (NOT /VOICE/) to ensure SMS delivery
+
+    Uses /SMS/ endpoint (NOT /VOICE/) for SMS delivery.
+
+    India: SMS delivery in India requires DLT (Distributed Ledger) registration and
+    an approved template. Set SMS_TEMPLATE_NAME to your 2factor DLT template name.
+    If 2factor returns Success but you don't receive SMS, check DLT and operator.
+    For local/dev testing, set OTP_DEBUG_LOG=1 to log the OTP in server logs.
     """
     BASE_URL = "https://2factor.in/API/V1"
     
@@ -128,11 +133,15 @@ class OTPService:
             
             # Check if the response indicates success
             if data.get("Status") == "Success":
-                logger.info("SMS OTP sent successfully via 2factor.in:", {
-                    "Status": data.get("Status"),
-                    "Details": data.get("Details"),
-                    "RequestId": data.get("RequestId"),
-                })
+                logger.info(
+                    "SMS OTP sent successfully via 2factor.in: Status=%s, Details=%s, RequestId=%s",
+                    data.get("Status"),
+                    data.get("Details"),
+                    data.get("RequestId"),
+                )
+                # Optional: log OTP in dev when SMS often doesn't arrive (e.g. India DLT). Set OTP_DEBUG_LOG=1 in env.
+                if os.environ.get("OTP_DEBUG_LOG", "").strip() in ("1", "true", "yes"):
+                    logger.warning("OTP_DEBUG_LOG: OTP for %s is %s (remove OTP_DEBUG_LOG in production)", phone_with_country_code, otp)
                 return otp  # Return the OTP code that was sent
             else:
                 error_msg = data.get('Details', data.get('Message', 'Unknown error'))
