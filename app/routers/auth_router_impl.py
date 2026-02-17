@@ -16,6 +16,7 @@ from ..services.storage.compat import (
 from ..schemas import (
     LoginRequest, LoginResponse, RegisterRequest, RegisterResponse,
     VerifyOTPRequest, VerifyOTPResponse, ResendOTPRequest, ResendOTPResponse,
+    RefreshTokenRequest, RefreshTokenResponse,
     UserResponse, AuthResponse, ErrorResponse, UpdateProfileRequest, UpdateProfileResponse,
     UploadImageRequest, UploadImageResponse, DeleteImageResponse, DeleteAccountRequest, DeleteAccountResponse
 )
@@ -1215,15 +1216,25 @@ async def verify_otp(payload: VerifyOTPRequest, response: Response, request: Req
             logger.error(f"Error creating user response: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Error preparing user data")
         
-        # Set httpOnly cookie
+        # Set httpOnly cookies: access (short-lived), refresh (60 days for stay-logged-in)
         try:
+            access_max_age = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            refresh_max_age = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600
             response.set_cookie(
                 key="access_token",
                 value=access_token,
                 httponly=True,
                 secure=True,
                 samesite="None",
-                max_age=60 * 60
+                max_age=access_max_age,
+            )
+            response.set_cookie(
+                key="refresh_token",
+                value=refresh_token,
+                httponly=True,
+                secure=True,
+                samesite="None",
+                max_age=refresh_max_age,
             )
         except Exception:
             pass
@@ -1252,6 +1263,65 @@ async def verify_otp(payload: VerifyOTPRequest, response: Response, request: Req
         except:
             pass
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+async def refresh_tokens(
+    response: Response,
+    request: Request,
+    payload: Optional[RefreshTokenRequest] = Body(None),
+):
+    """
+    Exchange a valid refresh token for new access and refresh tokens.
+    Keeps the user logged in for up to REFRESH_TOKEN_EXPIRE_DAYS (60 days).
+    Send refresh_token in JSON body or as cookie.
+    """
+    refresh_token = None
+    if payload and getattr(payload, "refresh_token", None):
+        refresh_token = payload.refresh_token
+    if not refresh_token:
+        refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token required")
+    payload_decoded = decode_jwt_token(refresh_token)
+    if not payload_decoded or payload_decoded.get("type") != "refresh":
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+    user_id = payload_decoded.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    with Session(engine) as session:
+        user = session.exec(select(User).where(User.id == user_id)).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+    access_token = create_jwt_token({"sub": user_id})
+    new_refresh_token = create_refresh_token({"sub": user_id})
+    expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    refresh_max_age = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600
+    try:
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=True,
+            samesite="None",
+            max_age=expires_in,
+        )
+        response.set_cookie(
+            key="refresh_token",
+            value=new_refresh_token,
+            httponly=True,
+            secure=True,
+            samesite="None",
+            max_age=refresh_max_age,
+        )
+    except Exception:
+        pass
+    return RefreshTokenResponse(
+        access_token=access_token,
+        refresh_token=new_refresh_token,
+        expires_in=expires_in,
+    )
+
 
 @router.post("/resend-otp", response_model=ResendOTPResponse)
 async def resend_otp(payload: ResendOTPRequest, request: Request, audit: AuditLogger = Depends(get_audit_logger), limiter: RateLimiter = Depends(get_rate_limiter)):
