@@ -97,6 +97,13 @@ class Settings(BaseSettings):
     
     # ML Model Settings
     ML_MODEL_PATH: str = os.environ.get("ML_MODEL_PATH", "models/dental_detection.onnx")
+    
+    # S3 / Object Storage Settings
+    S3_ENDPOINT_URL: Optional[str] = os.environ.get("S3_ENDPOINT_URL", None)
+    S3_REGION: Optional[str] = os.environ.get("S3_REGION", None)
+    S3_BUCKET_NAME: Optional[str] = os.environ.get("S3_BUCKET_NAME", None)
+    AWS_ACCESS_KEY_ID: Optional[str] = os.environ.get("AWS_ACCESS_KEY_ID", None)
+    AWS_SECRET_ACCESS_KEY: Optional[str] = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
 
     # Helper methods for list envs
     def _split_csv(self, value: str) -> List[str]:
