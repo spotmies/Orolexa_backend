@@ -15,10 +15,15 @@ def create_refresh_token(data: Dict[str, Any], days: int = None) -> str:
     to_encode.update({"exp": expire, "type": "refresh"})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
-def decode_jwt_token(token: str) -> Optional[Dict[str, Any]]:
+def decode_jwt_token(token: str, expected_type: str = "access") -> Optional[Dict[str, Any]]:
+    """Decode a JWT and enforce its type, so a refresh token can't be used as an access token."""
     try:
-        return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     except Exception:
         return None
+    token_type = payload.get("type", "access")
+    if token_type != expected_type:
+        return None
+    return payload
 
 

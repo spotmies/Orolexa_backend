@@ -1,3 +1,4 @@
+import secrets
 # app/services/otp_service.py
 from typing import Optional, Dict
 import logging
@@ -187,7 +188,7 @@ class OTPService:
         
         # If we have the stored OTP, compare directly
         if stored_otp:
-            is_valid = stored_otp == code
+            is_valid = secrets.compare_digest(stored_otp, code)
             logger.info(f"OTP verification for {phone}: {'Success' if is_valid else 'Failed'}")
             return is_valid
         

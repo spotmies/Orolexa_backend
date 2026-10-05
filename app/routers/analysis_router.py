@@ -816,7 +816,7 @@ def _process_structured_analysis(session: Session, user_id: str, files):
 
 
 @router.post("/quick-assessment")
-async def quick_assessment(
+def quick_assessment(
     file1: UploadFile = File(...),
     file2: UploadFile = File(None),
     file3: UploadFile = File(None),
@@ -852,7 +852,7 @@ You are a professional dental AI assistant. Analyze the provided dental image an
 
 
 @router.post("/detailed-analysis")
-async def detailed_analysis(
+def detailed_analysis(
     file1: UploadFile = File(...),
     file2: UploadFile = File(None),
     file3: UploadFile = File(None),
@@ -877,7 +877,7 @@ Carefully examine the image to correctly identify teeth positions from the patie
 
 
 @router.post("/analyze-images")
-async def analyze_images(
+def analyze_images(
     file1: UploadFile = File(...),
     file2: UploadFile = File(None),
     file3: UploadFile = File(None),
@@ -902,7 +902,7 @@ Provide accurate tooth locations from the patient's perspective using easy-to-un
 
 
 @router.post("/dental-health-report", response_model=StructuredAnalysisResponse)
-async def dental_health_report(
+def dental_health_report(
     file1: UploadFile = File(...),
     file2: UploadFile = File(None),
     file3: UploadFile = File(None),

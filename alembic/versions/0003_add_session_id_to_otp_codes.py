@@ -18,38 +18,27 @@ depends_on = None
 def upgrade() -> None:
     # Add session_id column to otp_codes table if it doesn't exist
     # This is for backward compatibility with the new OTP service implementation
-    op.execute("""
-        DO $$ 
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM information_schema.columns 
-                WHERE table_name = 'otp_codes' 
-                AND column_name = 'session_id'
-            ) THEN
-                ALTER TABLE otp_codes ADD COLUMN session_id VARCHAR(200);
-            END IF;
-        END $$;
-    """)
+    conn = op.get_bind()
+    insp = sa.inspect(conn)
+    columns = [c["name"] for c in insp.get_columns("otp_codes")]
+    if "session_id" not in columns:
+        with op.batch_alter_table("otp_codes") as batch_op:
+            batch_op.add_column(sa.Column("session_id", sa.String(length=200), nullable=True))
     
     # Ensure otp column is nullable (in case it was created as NOT NULL)
-    op.alter_column('otp_codes', 'otp',
-                    existing_type=sa.String(length=6),
-                    nullable=True,
-                    existing_nullable=True)
+    with op.batch_alter_table("otp_codes") as batch_op:
+        batch_op.alter_column('otp',
+                        existing_type=sa.String(length=6),
+                        nullable=True,
+                        existing_nullable=True)
 
 
 def downgrade() -> None:
     # Remove session_id column (optional - only if you want to rollback)
-    op.execute("""
-        DO $$ 
-        BEGIN
-            IF EXISTS (
-                SELECT 1 FROM information_schema.columns 
-                WHERE table_name = 'otp_codes' 
-                AND column_name = 'session_id'
-            ) THEN
-                ALTER TABLE otp_codes DROP COLUMN session_id;
-            END IF;
-        END $$;
-    """)
+    conn = op.get_bind()
+    insp = sa.inspect(conn)
+    columns = [c["name"] for c in insp.get_columns("otp_codes")]
+    if "session_id" in columns:
+        with op.batch_alter_table("otp_codes") as batch_op:
+            batch_op.drop_column("session_id")
 

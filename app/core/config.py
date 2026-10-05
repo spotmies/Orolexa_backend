@@ -1,3 +1,4 @@
+import logging
 # app/core/config.py
 import os
 from pydantic_settings import BaseSettings
@@ -130,6 +131,10 @@ def get_settings() -> Settings:
     cors_env = os.environ.get("CORS_ORIGINS")
     if cors_env:
         s.ALLOWED_ORIGINS = cors_env
+    if s.SECRET_KEY == "change-me-in-prod":
+        logging.getLogger(__name__).critical(
+            "JWT_SECRET_KEY is not set - tokens are signed with a public default and can be forged"
+        )
     if s.FIREBASE_PRIVATE_KEY:
         s.FIREBASE_PRIVATE_KEY = s.FIREBASE_PRIVATE_KEY.replace("\\n", "\n")
     return s
