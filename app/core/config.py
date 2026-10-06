@@ -104,6 +104,8 @@ class Settings(BaseSettings):
     S3_BUCKET_NAME: Optional[str] = os.environ.get("S3_BUCKET_NAME", None)
     AWS_ACCESS_KEY_ID: Optional[str] = os.environ.get("AWS_ACCESS_KEY_ID", None)
     AWS_SECRET_ACCESS_KEY: Optional[str] = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
+    # "virtual" (bucket.endpoint/key, Railway default) or "path" (endpoint/bucket/key)
+    S3_ADDRESSING_STYLE: str = os.environ.get("S3_ADDRESSING_STYLE", "virtual")
 
     # Helper methods for list envs
     def _split_csv(self, value: str) -> List[str]:

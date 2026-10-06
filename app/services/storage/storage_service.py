@@ -9,6 +9,7 @@ from PIL import Image
 import io
 
 from app.core.config import settings
+from app.services.storage import object_store
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,11 @@ class StorageService:
                         file_ext = '.jpg'
             
             new_filename = f"{file_id}{file_ext}"
+            key = f"{subfolder}/{new_filename}" if subfolder else new_filename
+
+            # Upload to bucket when configured; URL format stays the same
+            if object_store.is_enabled():
+                return f"/uploads/{key}" if object_store.put(key, image_data) else None
             
             # Create path
             if subfolder:
@@ -128,6 +134,12 @@ class StorageService:
             thumb_filename = f"{file_id}_thumb{file_ext}"
             thumb_path = os.path.join(self.upload_dir, "thumbnails", thumb_filename)
             
+            if object_store.is_enabled():
+                buf = io.BytesIO()
+                image.save(buf, 'JPEG', quality=85)
+                key = f"thumbnails/{thumb_filename}"
+                return f"/uploads/{key}" if object_store.put(key, buf.getvalue(), "image/jpeg") else None
+
             # Save thumbnail
             image.save(thumb_path, 'JPEG', quality=85)
             
@@ -140,6 +152,9 @@ class StorageService:
     def delete_image(self, image_url: str) -> bool:
         """Delete image from storage"""
         try:
+            if object_store.is_enabled():
+                return object_store.delete(object_store.key_from_url(image_url))
+
             # Convert URL to file path
             if image_url.startswith('/uploads/'):
                 file_path = os.path.join(self.upload_dir, image_url[9:])  # Remove '/uploads/'

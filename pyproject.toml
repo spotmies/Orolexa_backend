@@ -42,6 +42,7 @@ dependencies = [
     "python-dotenv>=1.1.1",
     "alembic>=1.13.2",
     "pillow>=11.3.0",
+    "boto3>=1.35.0",
     "opencv-python>=4.12.0.88",
     "google-generativeai>=0.8.5",
     # Twilio removed in favor of Firebase
