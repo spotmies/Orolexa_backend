@@ -20,6 +20,9 @@ def upgrade() -> None:
     # This is for backward compatibility with the new OTP service implementation
     conn = op.get_bind()
     insp = sa.inspect(conn)
+    # Fresh database: the app's create_all builds otp_codes with this column
+    if not insp.has_table("otp_codes"):
+        return
     columns = [c["name"] for c in insp.get_columns("otp_codes")]
     if "session_id" not in columns:
         with op.batch_alter_table("otp_codes") as batch_op:
@@ -37,6 +40,9 @@ def downgrade() -> None:
     # Remove session_id column (optional - only if you want to rollback)
     conn = op.get_bind()
     insp = sa.inspect(conn)
+    # Fresh database: the app's create_all builds otp_codes with this column
+    if not insp.has_table("otp_codes"):
+        return
     columns = [c["name"] for c in insp.get_columns("otp_codes")]
     if "session_id" in columns:
         with op.batch_alter_table("otp_codes") as batch_op:
