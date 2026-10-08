@@ -19,6 +19,9 @@ def upgrade() -> None:
     # Count failed verification attempts so an OTP can be invalidated after MAX_OTP_ATTEMPTS
     conn = op.get_bind()
     insp = sa.inspect(conn)
+    # Fresh database: the app's create_all builds otp_codes with this column
+    if not insp.has_table("otp_codes"):
+        return
     columns = [c["name"] for c in insp.get_columns("otp_codes")]
     if "attempts" not in columns:
         with op.batch_alter_table("otp_codes") as batch_op:
@@ -28,6 +31,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     conn = op.get_bind()
     insp = sa.inspect(conn)
+    # Fresh database: the app's create_all builds otp_codes with this column
+    if not insp.has_table("otp_codes"):
+        return
     columns = [c["name"] for c in insp.get_columns("otp_codes")]
     if "attempts" in columns:
         with op.batch_alter_table("otp_codes") as batch_op:
