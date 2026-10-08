@@ -22,6 +22,7 @@ from ..schemas import (
 )
 from ..services.auth import create_jwt_token, create_refresh_token, decode_jwt_token
 from ..services.auth.otp_service import OTPService
+from ..services.storage import object_store
 import os
 import uuid
 import shutil
@@ -554,58 +555,16 @@ def extract_country_code(phone: str) -> str:
         else:
             return '+1'  # Default to US/Canada if no pattern matches
 
-def save_profile_image(profile_image: str, user_id: str) -> str:
-    """Save profile image and return URL - handles base64 and file paths"""
-    try:
-        # Create uploads directory
-        uploads_dir = f"{settings.UPLOAD_DIR}/profiles"
-        os.makedirs(uploads_dir, exist_ok=True)
-        
-        # Generate filename
-        filename = f"{user_id}.jpg"
-        file_path = os.path.join(uploads_dir, filename)
-        
-        # Handle different image formats
-        if profile_image.startswith('data:image/'):
-            # Base64 encoded image with data URL
-            header, data = profile_image.split(',', 1)
-            image_data = base64.b64decode(data)
-        
-            # Save image
-            with open(file_path, "wb") as f:
-                f.write(image_data)
-                
-        elif profile_image.startswith('file://'):
-            # File path from mobile app - we can't access this directly
-            # For now, we'll skip saving the image and return None
-            # In production, you'd need to implement file upload handling
-            logger.warning(f"File path from mobile app detected: {profile_image}")
-            logger.warning("File upload handling not implemented - skipping profile image")
-            return None
-            
-        elif profile_image.startswith('/'):
-            # Absolute file path - check if file exists
-            if os.path.exists(profile_image):
-                # Copy file to uploads directory
-                shutil.copy2(profile_image, file_path)
-            else:
-                logger.warning(f"File not found: {profile_image}")
-                return None
-        else:
-            # Try to decode as base64 without data URL prefix
-            try:
-                image_data = base64.b64decode(profile_image)
-                with open(file_path, "wb") as f:
-                    f.write(image_data)
-            except:
-                logger.error(f"Invalid profile image format: {profile_image[:50]}...")
-                return None
-        
-        return file_path
-    except Exception as e:
-        logger.error(f"Error saving profile image: {e}")
-        # Don't fail the registration if image saving fails
-        return None
+def _image_media_type(path: str) -> str:
+    """Best-effort image content type from a filename or URL"""
+    lower = path.lower()
+    if lower.endswith('.png'):
+        return "image/png"
+    if lower.endswith('.webp'):
+        return "image/webp"
+    if lower.endswith('.gif'):
+        return "image/gif"
+    return "image/jpeg"
 
 def save_uploaded_file(upload_file: UploadFile, user_id: str) -> str:
     """Save uploaded file and return URL - handles multipart form data"""
@@ -625,7 +584,8 @@ def save_uploaded_file(upload_file: UploadFile, user_id: str) -> str:
         os.makedirs(uploads_dir, exist_ok=True)
         
         # Generate filename with original extension
-        filename = f"{user_id}{file_extension}"
+        # Unique name per upload so clients (and the 1-year Cache-Control) never serve a stale photo
+        filename = f"{user_id}_{uuid.uuid4().hex[:12]}{file_extension}"
         file_path = os.path.join(uploads_dir, filename)
         
         # Read and validate file size (5MB limit)
@@ -641,12 +601,30 @@ def save_uploaded_file(upload_file: UploadFile, user_id: str) -> str:
         except Exception as e:
             raise ValueError('Invalid image file')
         
+        if object_store.is_enabled():
+            key = f"profiles/{filename}"
+            if not object_store.put(key, file_content, upload_file.content_type):
+                raise ValueError('Failed to store profile image')
+            # Remove this user's previous profile files
+            object_store.delete_prefix(f"profiles/{user_id}", keep=key)
+            logger.info(f"File uploaded to bucket: {key}")
+            return f"/uploads/{key}"
+
         # Save file
         with open(file_path, "wb") as f:
             f.write(file_content)
         
+        # Remove this user's previous profile files
+        for existing in os.listdir(uploads_dir):
+            if existing.startswith(f"{user_id}") and existing != filename:
+                try:
+                    os.remove(os.path.join(uploads_dir, existing))
+                except OSError:
+                    pass
+
         logger.info(f"File uploaded successfully: {file_path}")
-        return file_path
+        # Return a URL path (served by the /uploads static mount), not a filesystem path
+        return f"/uploads/profiles/{filename}"
         
     except Exception as e:
         logger.error(f"Error saving uploaded file: {e}")
@@ -701,9 +679,12 @@ def get_rate_limiter() -> RateLimiter:
 def get_image_service() -> ImageService:
     return ImageService()
 
-def get_profile_service() -> ProfileService:
+def get_profile_service():
     session = _Session(_engine)
-    return ProfileService(session)
+    try:
+        yield ProfileService(session)
+    finally:
+        session.close()
 
 """
 Dependency to get current user from JWT token must be defined
@@ -1115,6 +1096,20 @@ async def verify_otp(payload: VerifyOTPRequest, response: Response, request: Req
             
             if not is_valid:
                 logger.warning(f"OTP verification failed for phone {phone}")
+                # Count the failed attempt; burn the OTP once MAX_OTP_ATTEMPTS is reached
+                # so a 6-digit code can't be brute-forced.
+                attempts_left = 0
+                with Session(engine) as session:
+                    record = session.exec(select(OTPCode).where(OTPCode.id == otp_record.id)).first()
+                    if record:
+                        record.attempts = (record.attempts or 0) + 1
+                        if record.attempts >= MAX_OTP_ATTEMPTS:
+                            record.is_used = True
+                        attempts_left = max(MAX_OTP_ATTEMPTS - record.attempts, 0)
+                        session.add(record)
+                        session.commit()
+                if attempts_left == 0:
+                    return VerifyOTPResponse(success=False, message="Too many incorrect attempts. Please request a new OTP.", data={"error": "OTP_ATTEMPTS_EXCEEDED"})
                 try:
                     audit.log('otp_verification_failed', phone, request_id=request_id, 
                               ip_address=client_info.get('ip_address'), success=False)
@@ -1283,7 +1278,7 @@ async def refresh_tokens(
         refresh_token = request.cookies.get("refresh_token")
     if not refresh_token:
         raise HTTPException(status_code=401, detail="Refresh token required")
-    payload_decoded = decode_jwt_token(refresh_token)
+    payload_decoded = decode_jwt_token(refresh_token, expected_type="refresh")
     if not payload_decoded or payload_decoded.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
     user_id = payload_decoded.get("sub")
@@ -1493,6 +1488,15 @@ async def get_profile_image(identifier: str, current_user: User = Depends(get_cu
                 select(User).where(User.id == current_user.id)
             ).first()
 
+            if user and user.profile_image_url and object_store.is_enabled():
+                data = object_store.get(object_store.key_from_url(user.profile_image_url))
+                if data is not None:
+                    return Response(
+                        content=data,
+                        media_type=_image_media_type(user.profile_image_url),
+                        headers={"Cache-Control": "private, no-cache"},
+                    )
+
             if user and user.profile_image_url:
                 # Convert stored URL (/uploads/...) to actual filesystem path
                 image_url = user.profile_image_url
@@ -1509,18 +1513,17 @@ async def get_profile_image(identifier: str, current_user: User = Depends(get_cu
                     return FileResponse(
                         file_path,
                         media_type="image/jpeg",
-                        headers={"Cache-Control": "public, max-age=31536000"},  # Cache for 1 year
+                        # Same URL for every photo change, so clients must revalidate
+                        headers={"Cache-Control": "private, no-cache"},
                     )
 
             # Legacy fallback: try to serve from the image_storage table
             image_record = get_user_profile_image(session, current_user.id)
             if image_record:
-                from fastapi.responses import Response
-
                 return Response(
                     content=image_record.image_data,
                     media_type=image_record.content_type,
-                    headers={"Cache-Control": "public, max-age=31536000"},
+                    headers={"Cache-Control": "private, no-cache"},
                 )
 
             raise HTTPException(status_code=404, detail="Profile image not found")
@@ -1550,6 +1553,18 @@ async def get_image(filename: str):
             logger.warning(f"Directory traversal attempt blocked: {filename}")
             raise HTTPException(status_code=403, detail="Access denied")
         
+        if object_store.is_enabled():
+            data = object_store.get(object_store.key_from_url(filename))
+            if data is not None:
+                return Response(
+                    content=data,
+                    media_type=_image_media_type(filename),
+                    headers={
+                        "Cache-Control": "public, max-age=31536000",
+                        "Access-Control-Allow-Origin": "*",
+                    },
+                )
+
         # Check if file exists
         if not os.path.exists(file_path):
             logger.warning(f"Image not found: {file_path}")
@@ -1596,6 +1611,15 @@ async def get_profile_image_by_filename(filename: str):
         if not os.path.abspath(file_path).startswith(os.path.abspath(os.path.join(settings.UPLOAD_DIR, "profiles"))):
             raise HTTPException(status_code=403, detail="Access denied")
         
+        if object_store.is_enabled():
+            data = object_store.get(f"profiles/{filename}")
+            if data is not None:
+                return Response(
+                    content=data,
+                    media_type=_image_media_type(filename),
+                    headers={"Cache-Control": "public, max-age=31536000"},
+                )
+
         # Check if file exists
         if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail="Profile image not found")
@@ -1778,6 +1802,16 @@ async def upload_profile_image(
         client_info = get_client_info(request) if request else {}
         
         profile_image_id = image_service.upload_profile_base64(current_user.id, payload.image)
+        if not profile_image_id:
+            raise HTTPException(status_code=400, detail="Invalid or empty image")
+        with Session(engine) as session:
+            user = session.exec(select(User).where(User.id == current_user.id)).first()
+            if user:
+                user.profile_image_url = profile_image_id
+                user.profile_image_id = None
+                user.updated_at = datetime.utcnow()
+                session.add(user)
+                session.commit()
         
         # Audit logging
         audit = get_audit_logger()
@@ -1788,7 +1822,7 @@ async def upload_profile_image(
             success=True,
             message="Image uploaded successfully",
             data={
-                "image_url": f"/api/auth/profile/image/{current_user.id}",
+                "image_url": profile_image_id,
                 "image_id": profile_image_id
             }
         )
@@ -1940,7 +1974,9 @@ async def delete_account(
             # Delete legacy profile image file if exists
             if user.profile_image_url:
                 try:
-                    if os.path.exists(user.profile_image_url):
+                    if object_store.is_enabled():
+                        object_store.delete_prefix(f"profiles/{user.id}")
+                    elif os.path.exists(user.profile_image_url):
                         os.remove(user.profile_image_url)
                 except Exception as e:
                     logger.warning(f"Failed to delete profile image file: {e}")

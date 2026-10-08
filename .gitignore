@@ -7,3 +7,8 @@ package-lock.json
 # Firmware binaries (keep directory structure)
 firmware/*.bin
 firmware/*.hex
+# Runtime data - contains patient photos / PII, never commit
+*.db
+uploads/
+server.log
+test_download.bin

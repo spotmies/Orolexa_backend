@@ -21,19 +21,13 @@ def get_image_from_database(session: Session, image_id: str) -> Optional[ImageSt
 def get_user_profile_image(session: Session, user_id: str) -> Optional[ImageStorage]:
     """Fetch the latest profile image for a user from the database, if any."""
     try:
-        # Heuristic: image_type == 'profile' when set; otherwise use latest by created_at
         img = session.exec(
             select(ImageStorage)
             .where(ImageStorage.user_id == user_id)
             .where((ImageStorage.image_type == 'profile'))
         ).first()
-        if img:
-            return img
-        return session.exec(
-            select(ImageStorage)
-            .where(ImageStorage.user_id == user_id)
-            .order_by(ImageStorage.created_at.desc())
-        ).first()
+        # Never fall back to other image types: that served dental scans as avatars
+        return img
     except Exception:
         return None
 

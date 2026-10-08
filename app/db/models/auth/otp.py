@@ -12,6 +12,7 @@ class OTPCode(SQLModel, table=True):
     flow: str = Field(max_length=10)
     session_id: Optional[str] = Field(default=None, max_length=200, description="Legacy: 2factor.in session ID (not used with new SMS endpoint)")
     is_used: bool = Field(default=False)
+    attempts: int = Field(default=0, description="Failed verification attempts")
     expires_at: datetime
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

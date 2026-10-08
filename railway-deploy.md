@@ -31,7 +31,21 @@ GEMINI_API_KEY=your_gemini_api_key
 BASE_URL=https://your-railway-app.railway.app
 ALLOWED_ORIGINS=https://your-frontend-domain.com
 DEBUG=false
+
+# Image storage (Railway Bucket) - reference the bucket's variables
+# (replace "Bucket" with your bucket service name)
+S3_ENDPOINT_URL=${{Bucket.ENDPOINT}}
+S3_REGION=${{Bucket.REGION}}
+S3_BUCKET_NAME=${{Bucket.BUCKET}}
+AWS_ACCESS_KEY_ID=${{Bucket.ACCESS_KEY_ID}}
+AWS_SECRET_ACCESS_KEY=${{Bucket.SECRET_ACCESS_KEY}}
+# S3_ADDRESSING_STYLE=virtual   # optional, "path" for other S3 providers
 ```
+
+When all S3 variables are set, profile, analysis and thumbnail images are stored in the bucket
+(keys `profiles/...`, `thumbnails/...`) instead of the container's ephemeral disk. URLs are
+unchanged (`/api/auth/images/...`) and the API proxies the bytes since Railway buckets are private.
+If the variables are missing, local disk (`UPLOAD_DIR`) is used as before.
 
 ### Step 3: Deploy
 

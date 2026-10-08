@@ -1,3 +1,4 @@
+import logging
 # app/core/config.py
 import os
 from pydantic_settings import BaseSettings
@@ -96,6 +97,15 @@ class Settings(BaseSettings):
     
     # ML Model Settings
     ML_MODEL_PATH: str = os.environ.get("ML_MODEL_PATH", "models/dental_detection.onnx")
+    
+    # S3 / Object Storage Settings
+    S3_ENDPOINT_URL: Optional[str] = os.environ.get("S3_ENDPOINT_URL", None)
+    S3_REGION: Optional[str] = os.environ.get("S3_REGION", None)
+    S3_BUCKET_NAME: Optional[str] = os.environ.get("S3_BUCKET_NAME", None)
+    AWS_ACCESS_KEY_ID: Optional[str] = os.environ.get("AWS_ACCESS_KEY_ID", None)
+    AWS_SECRET_ACCESS_KEY: Optional[str] = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
+    # "virtual" (bucket.endpoint/key, Railway default) or "path" (endpoint/bucket/key)
+    S3_ADDRESSING_STYLE: str = os.environ.get("S3_ADDRESSING_STYLE", "virtual")
 
     # Helper methods for list envs
     def _split_csv(self, value: str) -> List[str]:
@@ -130,6 +140,10 @@ def get_settings() -> Settings:
     cors_env = os.environ.get("CORS_ORIGINS")
     if cors_env:
         s.ALLOWED_ORIGINS = cors_env
+    if s.SECRET_KEY == "change-me-in-prod":
+        logging.getLogger(__name__).critical(
+            "JWT_SECRET_KEY is not set - tokens are signed with a public default and can be forged"
+        )
     if s.FIREBASE_PRIVATE_KEY:
         s.FIREBASE_PRIVATE_KEY = s.FIREBASE_PRIVATE_KEY.replace("\\n", "\n")
     return s
