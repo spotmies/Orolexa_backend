@@ -1,7 +1,8 @@
 # Core FastAPI dependencies
 fastapi>=0.115.13
 uvicorn[standard]>=0.34.3
-sqlmodel>=0.0.24
+# 0.0.45+ rejects naive datetimes; the models store naive UTC (datetime.utcnow)
+sqlmodel>=0.0.24,<0.0.45
 sqlalchemy>=2.0.41
 psycopg2-binary>=2.9.10
 psycopg[binary]>=3.2.0
